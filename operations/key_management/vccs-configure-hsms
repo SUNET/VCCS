@@ -1,0 +1,358 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2012, NORDUnet A/S
+# All rights reserved.
+#
+#   Redistribution and use in source and binary forms, with or
+#   without modification, are permitted provided that the following
+#   conditions are met:
+#
+#     1. Redistributions of source code must retain the above copyright
+#        notice, this list of conditions and the following disclaimer.
+#     2. Redistributions in binary form must reproduce the above
+#        copyright notice, this list of conditions and the following
+#        disclaimer in the documentation and/or other materials provided
+#        with the distribution.
+#     3. Neither the name of the NORDUnet nor the names of its
+#        contributors may be used to endorse or promote products derived
+#        from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+# Author : Fredrik Thulin <fredrik@thulin.net>
+#
+
+import os
+import re
+import sys
+import errno
+import logging
+import argparse
+import datetime
+
+from vccs_hsm_keydb import NDN_KeyDb, HsmKey
+from vccs_hsm import HsmSerial, HsmConfigurator
+
+default_device = '/dev/ttyACM0'
+default_max_key_age = 365 * 4 # should be at least one period longer than password retention policy
+default_key_flags = 0x10002 # Enabled flags 00010002 = YSM_AEAD_GENERATE,YSM_HMAC_SHA1_GENERATE
+default_keydb_file = 'ndn_key.db'
+default_key_usage = 'hmac'
+
+config = {
+    # Static cfg password for now. Master key is much more important for security.
+    'cfg_password': '13043f3895dc5127b6ab200de911f724bced397572c9778eba259710e2464fc7',
+
+    'originator_hsm_flags': 0x00010002, # Enabled flags 00010002 = YSM_AEAD_GENERATE,YSM_HMAC_SHA1_GENERATE
+    'validator_hsm_flags':  0x00030000, # Enabled flags 00030000 = YSM_HMAC_SHA1_GENERATE,YSM_TEMP_KEY_LOAD
+
+    'originator_hmac_key_flags': 0x00010000, # Enabled flags 00010000 = YSM_HMAC_SHA1_GENERATE
+    'validator_hmac_key_flags':  0x00010000, # Enabled flags 00010000 = YSM_HMAC_SHA1_GENERATE
+
+    'originator_oath_key_flags': 0x00000002, # Enabled flags 00000002 = YSM_AEAD_GENERATE
+    'validator_oath_key_flags':  0x00020000, # Enabled flags 00020000 = YSM_TEMP_KEY_LOAD
+    }
+
+class HSM_Info():
+    def __init__(self, hsm_id, desc):
+        self.id = hsm_id
+        self.desc = desc
+
+    def __repr__(self):
+        return '%s (%s)' % (self.id, self.desc)
+
+
+def parse_args():
+    """
+    Parse the command line arguments
+    """
+    parser = argparse.ArgumentParser(description = "YubiHSM configuration utility",
+                                     add_help = True,
+                                     formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+                                     )
+    parser.add_argument('-D', '--device',
+                        dest='device',
+                        default=default_device,
+                        help='YubiHSM device',
+                        metavar='PATH',
+                        )
+    parser.add_argument('--keydb_file',
+                        dest='keydb_file',
+                        default=default_keydb_file,
+                        help='Key database file',
+                        metavar='PATH',
+                        )
+    parser.add_argument('--debug',
+                        dest='debug',
+                        action='store_true', default=False,
+                        help='Enable debug operation',
+                        )
+    parser.add_argument('--max_key_age',
+                        dest='max_key_age',
+                        type=int, default=default_max_key_age,
+                        help='Number of days before HSM key handles are disabled',
+                        metavar='DAYS',
+                        )
+    parser.add_argument('--originator', '-O',
+                        dest='originator',
+                        action='store_true', default=False,
+                        help='Use originator-HSM flag values',
+                        )
+    parser.add_argument('--key_usage',
+                        dest='key_usage',
+                        default=default_key_usage,
+                        help='Key usage (hmac or oath)',
+                        metavar='TYPE',
+                        )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--init',
+                       dest='init',
+                       action='store_true', default=False,
+                       help='Initialize unconfigured HSMs',
+                       )
+    group.add_argument('--gen_key', '--gen',
+                       dest='gen_key',
+                       action='store_true', default=False,
+                       help='Generate a new key',
+                       )
+    group.add_argument('--install_keys', '--install',
+                       dest='install_keys',
+                       nargs='+',
+                       default=[],
+                       help='Install a previously generated keys in a HSM',
+                       )
+
+    res = parser.parse_args()
+    if res.key_usage not in ['hmac', 'oath']:
+        print("Invalid key usage '%s' (must be 'hmac' or 'oath')" % (res.key_usage))
+        sys.exit(1)
+    return res
+
+
+def prompt_for_hsm(args, logger, config):
+    """
+    Prompt for the insertion of a YubiHSM.
+    """
+    while True:
+        print ""
+        cfg = None
+        try:
+            cmd = raw_input("Insert a YubiHSM and press enter")
+            cfg = HsmConfigurator(args, logger, config['cfg_password'])
+        except KeyboardInterrupt:
+            logger.info("Aborted by user")
+            return None
+        except Exception, e:
+            logger.critical("Failed initialising HSM : %s" % (e))
+        if not cfg:
+            continue
+        if cmd:
+            # so that you can manually send commands to the HSM for testing
+            cfg.execute(cmd, '')
+        hsm_id = cfg.hsm_id()
+        logger.info("Detected YubiHSM with id : %s" % hsm_id)
+        return cfg
+
+def init_hsm_config(cfg, args, logger):
+    """
+    Initialize a YubiHSM that is in "NO_CFG>" mode, either due to never been
+    used before, or due to a "zap" command to reset it.
+    """
+    assert(not cfg.configured)
+    # NO_CFG> hsm 10002
+    # Enabled flags 00010002 = YSM_AEAD_GENERATE,YSM_HMAC_SHA1_GENERATE
+    # Enter cfg password (g to generate)
+    # Enter admin Yubikey public id 001/008 (enter when done)
+    # Enter master key (g to generate) 18d3fe72d72e09e09e3dc5e9d51461ecce9a7b8935221cec6c4e4588c4bab06c
+    # Confirm current config being erased (type yes) yes
+    # HSM>
+
+    if not cfg.master_key:
+        cfg.master_key = cfg.get_crypto_key("Enter master key (protects other keys in flash memory) " + \
+                                                "as hex, or press enter to generate : ", \
+                                                length = 32, pad = True, generate = True).encode('hex')
+
+    flags = config['validator_hsm_flags']
+    if args.originator:
+        flags = config['originator_hsm_flags']
+
+    (send, expect,) = ('send', 'expect',) # for color highlighting clarity below
+    commands = [(send, ''), (expect, '^NO_CFG> .*'),
+                (send, 'hsm %x' % (flags)), (expect, 'Enabled flags 0*%x = YSM_.*' % (flags)),
+                (expect, 'Enter cfg password'), (send, cfg.cfg_password),
+                (expect, 'Enter admin Yubikey public id'), (send, ''),
+                (expect, 'Enter master key'), (send, cfg.master_key + ''),
+                (expect, 'Confirm current config being erased'), (send, 'yes'),
+                (expect, '^HSM.*keys changed.*> .*'),
+                ]
+    cfg.hsm.interact(commands)
+    # HSM is impossible to unlock if keys are never committed (and encrypt is a bit slow)
+    commands = [(send, ''), (expect, '^HSM.*keys changed.*> .*'),
+                (send, 'keycommit'), (expect, '^HSM.*> .*'),
+                ]
+    cfg.hsm.interact(commands, retry_count = 50)
+
+    logger.info("Previously unconfigured HSM initialized")
+    logger.info("NOTICE: Master key of HSM set to %s" % (cfg.master_key))
+    return True
+
+def disable_old_keys(cfg, args, logger):
+    """
+    Disable key handles older than our configured time limit.
+    """
+    now = datetime.date.today()
+    keys = cfg.keylist()
+    logger.debug("Keylist result : %s" % (keys))
+    for key in keys:
+        age = key.days_old()
+        if key.active and age > args.max_key_age:
+            logger.info("Disabling HsmKey %s (older than %i days/%.1f years (%i))" % \
+                            (key, args.max_key_age, args.max_key_age / 365.24, age))
+            cfg.disable_key(key)
+
+def get_new_keyhandle(args, kdb):
+    """
+    Generate a new key in the originator HSM.
+    """
+    now = datetime.date.today()
+    suffix = 'aa'
+    if args.key_usage == 'oath':
+        suffix = 'da' # halfway to ff if only using alphabetics
+    while True:
+        suggestion = '%i%i%i%s' % (now.year - 2000, now.month, now.day, suffix) # oh no, a 2100 problem
+        keyid = raw_input("Enter new key handle (press enter for '%s') : " % (suggestion))
+        if not keyid:
+            keyid = suggestion
+        if not kdb.get_key(keyid):
+            return keyid
+        logger.info("Key '%s' already exists in the key database." % (keyid))
+
+def generate_key(args, logger, cfg, kdb):
+    """
+    Action --gen_key.
+
+    Generate a new key and store it in the key database.
+    """
+    keyid = get_new_keyhandle(args, kdb)
+
+    # Throw away some random to stir up the pool
+    cfg.logging(False)
+    cfg.get_random(4096)
+    cfg.logging(True)
+
+    # Generate the new key, using the RNG in the YubiHSM and the one on the server
+    key = cfg.get_random(32).encode('hex')
+    flags = config['validator_%s_key_flags' % (args.key_usage)]
+    if args.originator:
+        flags = config['originator_%s_key_flags' % (args.key_usage)]
+    this = HsmKey(keyid, key, flags, args.key_usage)
+    kdb.add_key(this)
+
+    kdb.save(args.keydb_file)
+    logger.info("New key '%s' added to key database." % (keyid))
+
+    return True
+
+def install_keys(args, logger, cfg, kdb):
+
+    # first check if we have all keys specified
+    for keyid in args.install_keys:
+        if not kdb.get_key(keyid):
+            logger.error("Key with id '%s' not found in key database" % (keyid))
+            logger.info("Keys in database :")
+            for this in kdb.get_ids():
+                logger.info("  %s" % (kdb.get_key(this)))
+            return False
+
+    if not cfg.configured:
+        logger.error("HSM is unconfigured, run with --init before installing keys.")
+        return False
+
+    duplicate = False
+    keylist = cfg.keylist() # for debug message ordering
+    logger.debug("Keys now in HSM :")
+    for key in keylist:
+        logger.debug("  %s" % (key))
+        if key.keyid in args.install_keys:
+            logger.error("Key '%s' already present in HSM." % (keyid))
+            duplicate = True
+    if duplicate:
+        return False
+
+    disable_old_keys(cfg, args, logger)
+
+    for keyid in args.install_keys:
+        this = kdb.get_key(keyid)
+        flags = config['validator_%s_key_flags' % (args.key_usage)]
+        if args.originator:
+            flags = config['originator_%s_key_flags' % (args.key_usage)]
+        if flags != this.flags:
+            logger.debug("Using flags 0x%x instead of 0x%x on key" % (flags, this.flags))
+            this.flags = flags
+        # we've already checked all keys exist in the database
+        cfg.keyload(this)
+
+    logger.info("")
+    logger.info("Keys now in HSM :")
+    for key in cfg.keylist():
+        logger.info("  %s" % (key))
+
+    cfg.keycommit()
+
+    return True
+
+def main(args, logger, config):
+    cfg = prompt_for_hsm(args, logger, config)
+    if not cfg:
+        return False
+
+    if args.init:
+        if cfg.configured:
+            logger.error("Asked to initialize HSM, but it is already configured (manually 'zap' first)")
+            return False
+        return init_hsm_config(cfg, args, logger)
+
+    kdb = NDN_KeyDb()
+    try:
+        kdb.load(args.keydb_file)
+    except IOError, e:
+        if e.errno == errno.ENOENT:
+            # new db
+            logger.info("No previous database found in file '%s'" % (args.keydb_file))
+            pass
+
+    if args.gen_key:
+        return generate_key(args, logger, cfg, kdb)
+
+    if args.install_keys:
+        return install_keys(args, logger, cfg, kdb)
+
+    # never here
+    return False
+
+if __name__ == '__main__':
+    assert(config['cfg_password'].decode('hex'))
+
+    args = parse_args()
+    level = logging.INFO
+    if args.debug:
+        level = logging.DEBUG
+    logging.basicConfig(level=level,
+                        format='%(levelname)-8s %(yhsm_id)s %(message)s',
+                        )
+    logger = logging.getLogger('nordunet-configure-hsms')
+    logger = logging.LoggerAdapter(logger, {'yhsm_id': ''})
+    if main(args, logger, config):
+        sys.exit(0)
+    sys.exit(1)

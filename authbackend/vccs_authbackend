@@ -1,0 +1,271 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2012, 2013, NORDUnet A/S
+# All rights reserved.
+#
+#   Redistribution and use in source and binary forms, with or
+#   without modification, are permitted provided that the following
+#   conditions are met:
+#
+#     1. Redistributions of source code must retain the above copyright
+#        notice, this list of conditions and the following disclaimer.
+#     2. Redistributions in binary form must reproduce the above
+#        copyright notice, this list of conditions and the following
+#        disclaimer in the documentation and/or other materials provided
+#        with the distribution.
+#     3. Neither the name of the NORDUnet nor the names of its
+#        contributors may be used to endorse or promote products derived
+#        from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+# Author : Fredrik Thulin <fredrik@thulin.net>
+#
+
+"""
+VCCS authentication backend service.
+
+This is a network service that processes authentication requests received
+over the network in a multi-factor authentication fashion.
+
+See the README file for a more in-depth description.
+"""
+
+import os
+import sys
+import logging
+import logging.handlers
+import argparse
+import cherrypy
+import threading
+import simplejson
+
+import ndnkdf
+import vccs_auth_common
+import vccs_auth_password
+import vccs_auth_oath
+import vccs_auth_hasher
+
+from vccs_auth_common import AuthenticationError
+
+default_device = "/dev/ttyACM0"
+default_threads = 8
+default_nettle_path = None
+
+myname = 'vccs_backend'
+
+def parse_args():
+    """
+    Parse the command line arguments
+    """
+    parser = argparse.ArgumentParser(description = "Authentication backend server",
+                                     add_help = True,
+                                     formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+                                     )
+    parser.add_argument('-D', '--device',
+                        dest='device',
+                        default=default_device,
+                        required=True,
+                        help='YubiHSM device',
+                        )
+
+    parser.add_argument('--nettle-path',
+                        dest='nettle_path',
+                        default=default_nettle_path,
+                        required=False,
+                        help='Path to libnettle',
+                        )
+
+    parser.add_argument('-P', '--port',
+                        dest='listen_port',
+                        type=int,
+                        required=True,
+                        help='Port to listen on',
+                        metavar='PORT',
+                        )
+
+    parser.add_argument('--threads',
+                        dest='threads',
+                        type=int, default=default_threads,
+                        help='Number of (hashing) worker threads to start',
+                        metavar='NUM',
+                        )
+
+    return parser.parse_args()
+
+class AuthRequest():
+
+    """
+    Parse JSON body into auth request object.
+
+    Example (request) body, two-factor authentication with password and OATH-TOTP code :
+
+    {
+        "auth": {
+            "version": 1,
+            "user_id": "something-uniquely-identifying-user",
+            "factors": [
+                {
+                    "H1": "$2a$08$Ahy51oCM6Vg6d.1ScOPxsebGxtrT15Jt6Ovqcq4amvsx47wVP9EBy",
+                    "credential_id": "4711",
+                    "credential_stored_hash": "72d916f97d44edf4e358f945b5bfb0b6d2bdd1bed55c63b2d82c922979fac1ba85c10cc065a61a86aa114f549485b6bb5a56f15c28f5e482319ec124bc4a41b7",
+                    "type": "password"
+                },
+                {
+                    "credential_aead": "$NDNv1$0x2001$000000003c00$ffe5ce9cb3ff406bbc65931ac6e1ea5302455b3e161f41da34947eecac201d7e$",
+                    "credential_id": 4711,
+                    "type": "oath-totp",
+                    "user_code": "893712"
+                }
+            ]
+        }
+    }
+    """
+
+    def __init__(self, json):
+        #print "\n\nDecoding JSON : '%s'\n\n" % (json)
+        body = simplejson.loads(json)
+        req = body['auth']
+        for req_field in ['version', 'user_id', 'factors']:
+            if req_field not in req:
+                raise AuthenticationError("No {!r} in request".format(req_field))
+        if int(req['version']) is not 1:
+            raise AuthenticationError("Unknown request version : {!r}".format(req['version']))
+
+        self._user_id = req['user_id']
+
+        self._factors = []
+        for factor in req['factors']:
+            if factor['type'] == 'password':
+                self._factors.append(vccs_auth_password.VccsPasswordFactor(factor, self._user_id))
+            elif factor['type'] == 'oath-hotp' :
+                self._factors.append(vccs_auth_oath.OathHotpFactor(factor))
+            elif factor['type'] == 'oath-totp' :
+                self._factors.append(vccs_auth_oath.OathTotpFactor(factor))
+            else:
+                # eventually fail on unknown type, but continue processing
+                self._factors.append(FailFactor('Unknown authentication factor type : {!r}'.format(factor['type'])))
+
+    def factors(self):
+        return self._factors
+
+    def user_id(self):
+        return self._user_id
+
+class FailFactor():
+    """
+    Eventually fail authentication.
+    """
+    def __init__(self, reason):
+        self.type = 'fail'
+        self.reason = reason
+
+    def authenticate(self, hasher, kdf, logger):
+        logger.audit("result=FAIL, factor=fail, reason={}".format(self.reason))
+        return False
+
+class VccsLogger():
+    def __init__(self, context = '', debug = False):
+        self.context = context
+
+        self.logger = logging.getLogger(myname)
+        if debug:
+            self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.INFO)
+        syslog_h = logging.handlers.SysLogHandler()
+        formatter = logging.Formatter('%(name)s: %(levelname)s %(message)s')
+        syslog_h.setFormatter(formatter)
+        self.logger.addHandler(syslog_h)
+
+    def audit(self, data):
+        self.logger.info("AUDIT: {context}, {data}".format(context = self.context, data = data))
+
+    def set_context(self, context):
+        self.context = ', '.join([k + '=' + v for (k, v) in context.items()])
+
+
+class AuthBackend(object):
+
+    def __init__(self, hasher, kdf, logger):
+        self.hasher = hasher
+        self.kdf = kdf
+        self.logger = logger
+
+    @cherrypy.expose
+    def authenticate(self, request=None):
+        result = False
+        try:
+            auth = AuthRequest(request)
+
+            log_context = {'client': cherrypy.request.remote.ip,
+                           'user_id': auth.user_id(),
+                           }
+            self.logger.set_context(log_context)
+
+            # Go through the list of authentication factors in the request
+            fail = 0
+            for factor in auth.factors():
+                if not factor.authenticate(self.hasher, self.kdf, self.logger):
+                    fail += 1
+            result = (fail == 0)
+        except AuthenticationError, autherr:
+            cherrypy.log.error("FAILED processing request from {ip!r}: {reason!r}".format( \
+                    ip = cherrypy.request.remote.ip, reason = autherr.reason))
+            cherrypy.response.status = 500
+            # Don't disclose anything about our internal issues
+            return None
+
+        if not auth.factors():
+            result = False
+
+        self.logger.audit("factors={factors}, auth_result={res}".format( \
+                factors = [x.type for x in auth.factors()], res = result))
+
+        response = {'auth_response': {'version': 1,
+                                      'authenticated': result,
+                                      }
+                    }
+        return "{}\n".format(simplejson.dumps(response))
+
+
+def main():
+    """
+    Initialize everything and start the authentication backend.
+    """
+    args = parse_args()
+
+    kdf = ndnkdf.NDNKDF(args.nettle_path)
+
+    hsm_lock = threading.RLock()
+    hasher = vccs_auth_hasher.hasher_from_string(args.device, hsm_lock, debug=False)
+    logger = VccsLogger()
+
+    cherrypy.config.update( {'server.thread_pool': args.threads,
+                             'server.socket_port': args.listen_port,
+                             } )
+    cherrypy.quickstart(AuthBackend(hasher, kdf, logger))
+
+if __name__ == '__main__':
+    newname = os.path.basename(sys.argv[0])
+    if newname:
+        global myname
+        myname = newname
+
+    try:
+        if main():
+            sys.exit(0)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        pass

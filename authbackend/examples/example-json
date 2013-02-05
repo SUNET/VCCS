@@ -1,0 +1,35 @@
+#!/usr/bin/python
+#
+# Produce example JSON to be POSTed to authbackend
+#
+#
+# HSM> keyload
+# 00002000,2000200020002000200020002000200020002000200020002000200020002000
+# HSM> keycommit
+#
+# $ ./example-json | curl --data-urlencode request@- -v localhost:8080/authenticate
+#
+
+import json
+import bcrypt
+
+bcrypt_salt = '$2a$08$Ahy51oCM6Vg6d.1ScOPxse'
+
+keyhandle = '0x2000'
+iterations = 12345
+pwhash = '752a21a358bfc061f9cb8c528c2d13783776c5752a587b1cbee010f37d50eef0e7185a308786b94a142e3878ea94b1643f39ecf856f861794e97926bd9a0f920'
+
+a = {'auth':
+         {'version': 1,
+          'user_id': 'ft@example.net',
+          'factors': [
+            {'type': 'password',
+             'H1': bcrypt.hashpw('plaintext', bcrypt_salt),
+             'credential_id': 4711,
+             'credential': '$'.join(['', 'NDNv1', keyhandle, str(iterations), pwhash, '']),
+             }
+            ]
+          }
+     }
+
+print json.dumps(a, sort_keys=True, indent=4)

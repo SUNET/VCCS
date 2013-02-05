@@ -1,2 +1,54 @@
-This is the VCCS.
+This is the Very Complicated Credential Store.
 
+The VCCS is en-route to becoming a complete authentication system with at
+least a SAML IdP front end, a distributed user database, separate password
+hashing servers etc.
+
+Design started from performance requirements, so a nearly complete backend
+service for password and OTP validation was the first thing to be
+implemented.
+
+
+
+
+Authentication
+==============
+
+Pseudo-code describing the authentication process :
+
+  On frontend (SAML IdP, RADIUS server etc) :
+  -------------------------------------------
+  // Get rid of plaintext as soon as possible, to avoid leaking it (logs etc.)
+  H1 = bcrypt(credential_id | plaintext_password, credential_stored_salt1)
+  send_to_backend(H1, user_id, credential_id, credential_stored_hash)
+
+  On backend (dedicated hashing servers) :
+  ----------------------------------------
+  T = 'A' | user_id | credential_id | H1  // Lock down key usage & credential
+  salt = yhsm_hmac_sha1(T)                // to auth
+  H2 = PBKDF2-HMAC-SHA512(T, salt)
+
+  audit_log(frontend_id, credential_id, H2, credential_stored_hash)
+
+  return (H2 == credential_stored_hash)
+
+
+Key management
+==============
+
+The HMAC keys used to derive the locally parameterized salt (in the dedicated
+hashing servers) from the YubiHSMs should not be used indefinately.
+
+If local password retention policy mandates users to change password every
+three years, and key management policy limits key usage to credentials created
+in a six months period, a total of seven six-months keys could be allowed to
+co-exist simultaneously in the YubiHSM.
+
+By having seven keys, the user can be authenticated for six months after the
+password expires to allow for a password change. After 3.5 years, the password
+would have to be reset using some external mechanism.
+
+NIST SP 800-57 has recommendations regarding the lifetime of an "Symmetric
+authentication key", saying that it should not be used on Originator systems
+(operation: password set) for more than two years, and not on Recipient
+systems (operation: passowrd validation) for more than two+three years.

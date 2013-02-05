@@ -1,0 +1,59 @@
+VCCS authentication backend service.
+
+This is a network service that processes authentication requests received
+over the network in a multi-factor authentication fashion.
+
+Note: there are a couple of rather important todo-s listed in the file TODO.
+
+A simple example request using only one factor (password auth) could look
+like this :
+
+    {
+      "auth": {
+        "version": 1,
+        "user_id": "something-uniquely-identifying-user",
+         "factors": [
+            {
+              "H1": "$2a$08$Ahy51oCM6Vg6d.1ScOPxse<snip bcrypt hash>7wVP9EBy",
+              "credential_id": "4711",
+              "credential_stored_hash": "72d916f97<snip HMAC-SHA-512 hash>ed",
+              "type": "password"
+            }
+          ]
+       }
+    }
+
+The response would look like this :
+
+  {
+    "auth_response": {
+      "version": 1,
+      "authenticated": true
+    }
+  }
+
+(naturally, "authenticated" could also be false).
+
+As this service currently does not support TLS, it is advisable to install an
+nginx (or other) full web server / load balancer in front of this service.
+
+A deployment diagram for an authentication server with two cores and two
+YubiHSMs :
+
+                                                +--- YubiHSM 1   +-- thread 1
+                                                |                |
+                                     +-- vccs_authbackend 1 -----+-- thread 2
+                                     |
+external IP --- nginx --- loopback --+
+                                     |
+                                     +-- vccs_authbackend 2 -----+-- thread 1
+                                                |                |
+                                                +--- YubiHSM 2   +-- thread 2
+
+
+As a guess, the total number of threads should be around twice the number of
+cores in the server, but benchmarking needs to be employed to find the optimal
+number for any specific hardware and software setup.
+
+Audit logs will be sent to syslog, most probably using UDP datagrams. Enable
+remote reception accordingly.
