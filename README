@@ -1,4 +1,4 @@
-This is the Very Complicated Credential Store.
+This is the Very Complicated Credential Service.
 
 The VCCS is en-route to becoming a complete authentication system with at
 least a SAML IdP front end, a distributed user database, separate password
