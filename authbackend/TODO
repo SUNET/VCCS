@@ -17,3 +17,6 @@ TODO for vccs_authbackend :
   * audit log to something else than syslog?
 
   * generate signatures of authentication events, using YubiHSM AEADs?
+
+  * backends need a revocation list for all credentials that should not be used
+    anymore, to prevent an attacker re-inserting old credentials into the user db

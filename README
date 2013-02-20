@@ -33,6 +33,104 @@ Pseudo-code describing the authentication process :
   return (H2 == credential_stored_hash)
 
 
+Rationale of the hashing scheme
+===============================
+
+Two algorithms was chosen
+
+  a) to not place all trust in a single algorithm
+  b) to increase the customization required by an attacker to attack this
+     particular systems. This is probably only of real relevance as counter-
+     measure to ASIC based attacks (and maybe FPGA)
+  c) to be able to do a part of the hashing as soon as possible (in the
+     front ends), while being able to scale hashing computation power easier
+     in dedicated backends
+
+bcrypt was chosen since it is generally ranked very high in strength against
+brute force attacks (bcrypt does not appear to execute faster on GPUs than
+CPUs today, although that will likely change with future GPUs).
+
+PBKDF2-HMAC-SHA512 was chosen because it is very well studied by now, as well
+as perhaps being a requirement for some. SHA512 was preferred over other SHA's
+because it currently favours the defender since it is pessimising anyone using
+only 32 bit operations (such as contemporary GPUs).
+
+Annotations
+===========
+
+  H1 = bcrypt(credential_id | plaintext_password, credential_stored_salt1)
+
+credential_id should be a unique identifier for this particular credential.
+An actual user might have many credentials associated with him/her. The
+credential_id should never be reused, so a changed password should generate a
+new unique credential_id and revoke the old one. This is in order to prevent
+an attacker controlling the user database from restoring old (cracked)
+credential information.
+
+plaintext_password is the password entered in the IdP HTML login form, for
+example.
+
+credential_stored_salt1 is the bcrypt salt in the current version. It is
+read from the user database.
+
+The computation of H1 should be performed as soon as possible in the frontend
+code, to immediately get rid of the plaintext password - hopefully before
+it ends up in a debug log, swap file, core dump or similar.
+
+
+  T = 'A' | user_id | credential_id | H1  // Lock down key usage & credential
+
+The 'key usage' is 'A' (A for authentication). It is included in T just in
+case someone builds, say, a signing service with the same scheme, where users
+use the same password. Really, just as a precaution that will perhaps allow
+solving some future problem.
+
+user_id is a unique identifier for this user. It might be a username, an
+e-mail address or some other type of persistent identifier of a specific
+user. It should be something the user (or the users device) supplies to the
+login form, rather than something stored as part of a credential, in order
+to not allow an attacker that can modify the user database to re-associate a
+(known) credential with another user to gain access to that other users
+account.
+
+credential_id is the unique identifier of this particular credential.
+
+H1 is the bcrypt() result (the bcrypt operation is performed on the front end).
+It is imperative that H1 is a part of the local parametrization using the
+YubiHSM. This prevents an attacker that gain access to the authentication
+backend from just using that access to calculate all the PBKDF2 salts for all
+the credentials (should they also have access to a database dump), to later be
+used in an offline attack. This way, an attacker can just get the PBKDF2 salts
+for users that log in during the time period they have access to the authen-
+tication backends, but the PBKDF2 salt is superflous to attack those users
+credentials since the raw H1 (bcrypt hash) will be less costly to attack
+directly.
+
+
+  salt = yhsm_hmac_sha1(T)
+
+salt is the result of a keyed HMAC-SHA-1 calculation, done inside the YubiHSM.
+The key is not possible to extract by an attacker that gains access to the
+authentication backend, and the result is 160 bits of salt per credential,
+with very good random distribution. If an attacker acquires any number of
+H2 hashes (those stored in the credential database), he will have to attempt
+on average 2^159 different possible salts per attempted plaintext, thus in
+effect multiplying the work factor for the attacker with about 10^47, which
+is a really really large number.
+
+
+  H2 = PBKDF2-HMAC-SHA512(T, salt)
+
+H2 is the final hash, that is compared to what is stored in the credential
+database. T is used as input, but H1 could probably have been used too. T will
+be longer than H1, which might increase cost per attemtp for an attacker, but
+on the other hand using T might expose the PBKDF2 code to more attacker
+controlled data (in an online attack scenario). H1 would be easier to input
+validate, and therefor maybe a safer input data to PBKDF2. Nothing says that
+user_id and credential_id can't be properly input validated though, so T is
+used currently.
+
+
 Key management
 ==============
 
