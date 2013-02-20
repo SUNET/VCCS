@@ -9,8 +9,6 @@ service for password and OTP validation was the first thing to be
 implemented.
 
 
-
-
 Authentication
 ==============
 
@@ -55,8 +53,9 @@ as perhaps being a requirement for some. SHA512 was preferred over other SHA's
 because it currently favours the defender since it is pessimising anyone using
 only 32 bit operations (such as contemporary GPUs).
 
-Annotations
-===========
+
+Annotations for the hashing scheme
+==================================
 
   H1 = bcrypt(credential_id | plaintext_password, credential_stored_salt1)
 
@@ -123,7 +122,7 @@ is a really really large number.
 
 H2 is the final hash, that is compared to what is stored in the credential
 database. T is used as input, but H1 could probably have been used too. T will
-be longer than H1, which might increase cost per attemtp for an attacker, but
+be longer than H1, which might increase cost per attempt for an attacker, but
 on the other hand using T might expose the PBKDF2 code to more attacker
 controlled data (in an online attack scenario). H1 would be easier to input
 validate, and therefor maybe a safer input data to PBKDF2. Nothing says that
