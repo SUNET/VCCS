@@ -64,7 +64,8 @@ An actual user might have many credentials associated with him/her. The
 credential_id should never be reused, so a changed password should generate a
 new unique credential_id and revoke the old one. This is in order to prevent
 an attacker controlling the user database from restoring old (cracked)
-credential information.
+credential information. The backends should have a locally stored list of
+revoked credentials.
 
 plaintext_password is the password entered in the IdP HTML login form, for
 example.
@@ -128,6 +129,39 @@ controlled data (in an online attack scenario). H1 would be easier to input
 validate, and therefor maybe a safer input data to PBKDF2. Nothing says that
 user_id and credential_id can't be properly input validated though, so T is
 used currently.
+
+
+Possible improvements
+=====================
+
+Solar Designer points out that an intruder with access to the authentication
+backend is not entirely limited to recording H1 hashes (and thus, limited to
+attacking users logging in while the intruder has access), but could also
+spend the time until disovered with calculating H1 hashes for candidate
+passwords and then use the access to the HSM to actually compute the local
+parameter (PBKDF2 salt), to the later on do an offline attack on the PBKDF2
+hashes using the now known salt. He suggests changing the current
+
+  bcrypt -> HSM -> PBKDF2
+
+into
+
+  bcrypt -> PBKDF2(iter=many) -> HSM -> PBKDF2(iter=1)
+
+to minimize the number of candidate passwords an attacker can calculate the
+PBKDF2 salt for, using temporary access to the authentication backend HSM.
+
+A possible alternative would be to keep the bcrypt hash away from the backends,
+but that would mean truncating H1 before it is sent to the backends.
+
+Solar Designer further calls giving the frontends read access to the password
+hashes an "unjustified risk (even though they're useless without local
+parameter)". The obvious alternative would be to let the backends access the
+database servers themselves, which might actually help/solve other issues as
+well (such as updating OATH counter value in database before responding 'OK')
+but it is also an additional attack vector on the backends (think exploitable
+bug in database client software, and intruder already having access to
+database server host).
 
 
 Key management
