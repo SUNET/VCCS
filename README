@@ -151,10 +151,11 @@ into
 to minimize the number of candidate passwords an attacker can calculate the
 PBKDF2 salt for, using temporary access to the authentication backend HSM.
 
-A possible alternative would be to keep the bcrypt salt unknown to the
-backends, but that would mean truncating H1 before it is sent to the backends.
+A possible alternative to this change (or something that ought to be done in
+addition to it) would be to keep the bcrypt salt unknown to the backends, by
+removing the salt portion from H1 before it is sent to the backends.
 
-One of these two solutions (or another, yet to be thought of) will be
+One of these two solutions, both, (or another, yet to be thought of) will be
 implemented.
 
 
