@@ -76,6 +76,8 @@ class VccsPasswordFactor():
         audit_log(frontend_id, credential_id, H2, credential_stored_hash)
 
         return (H2 == credential_stored_hash)
+
+        See the README file for a longer reasoning about this scheme.
         """
 
         # Lock down key usage & credential to auth

@@ -47,15 +47,16 @@ import sys
 import logging
 import logging.handlers
 import argparse
-import cherrypy
 import threading
+
+import cherrypy
 import simplejson
 
 import ndnkdf
-import vccs_auth_common
-import vccs_auth_password
 import vccs_auth_oath
+import vccs_auth_common
 import vccs_auth_hasher
+import vccs_auth_password
 
 from vccs_auth_common import AuthenticationError
 
@@ -78,6 +79,7 @@ def parse_args():
                         default=default_device,
                         required=True,
                         help='YubiHSM device',
+                        metavar='PATH',
                         )
 
     parser.add_argument('--nettle-path',
@@ -85,6 +87,7 @@ def parse_args():
                         default=default_nettle_path,
                         required=False,
                         help='Path to libnettle',
+                        metavar='DIR',
                         )
 
     parser.add_argument('-P', '--port',
@@ -124,7 +127,7 @@ class AuthRequest():
                 },
                 {
                     "credential_aead": "$NDNv1$0x2001$000000003c00$ffe5ce9cb3ff406bbc65931ac6e1ea5302455b3e161f41da34947eecac201d7e$",
-                    "credential_id": 4711,
+                    "credential_id": 4712,
                     "type": "oath-totp",
                     "user_code": "893712"
                 }
