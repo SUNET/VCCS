@@ -60,10 +60,12 @@ import vccs_auth_password
 import vccs_auth_credstore
 
 from vccs_auth_common import VCCSAuthenticationError
+from vccs_auth_credstore import VCCSAuthCredentialStoreMongoDB
 
 default_device = "/dev/ttyACM0"
 default_threads = 8
 default_nettle_path = None
+default_mongodb_uri = "127.0.0.1"
 
 myname = 'vccs_backend'
 
@@ -106,6 +108,13 @@ def parse_args():
                         metavar='NUM',
                         )
 
+    parser.add_argument('--mongodb-uri',
+                        dest='mongodb_uri',
+                        type=str, default=default_mongodb_uri,
+                        help='MongoDB credential store',
+                        metavar='URI',
+                        )
+
     return parser.parse_args()
 
 class AuthRequest():
@@ -136,7 +145,7 @@ class AuthRequest():
     }
     """
 
-    def __init__(self, json):
+    def __init__(self, json, credstore):
         #print "\n\nDecoding JSON : '%s'\n\n" % (json)
         body = simplejson.loads(json)
         req = body['auth']
@@ -151,13 +160,13 @@ class AuthRequest():
         self._factors = []
         for factor in req['factors']:
             if factor['type'] == 'password':
-                self._factors.append(vccs_auth_password.VccsPasswordFactor(factor, self._user_id))
+                self._factors.append(vccs_auth_password.VccsPasswordFactor(factor, self._user_id, credstore))
             elif factor['type'] == 'oath-hotp' :
                 self._factors.append(vccs_auth_oath.OathHotpFactor(factor))
             elif factor['type'] == 'oath-totp' :
                 self._factors.append(vccs_auth_oath.OathTotpFactor(factor))
             else:
-                # eventually fail on unknown type, but continue processing
+                # eventually fail on unknown type, but continue processing to consume any OTPs
                 self._factors.append(FailFactor('Unknown authentication factor type : {!r}'.format(factor['type'])))
 
     def factors(self):
@@ -201,16 +210,17 @@ class VccsLogger():
 
 class AuthBackend(object):
 
-    def __init__(self, hasher, kdf, logger):
+    def __init__(self, hasher, kdf, logger, credstore):
         self.hasher = hasher
         self.kdf = kdf
         self.logger = logger
+        self.credstore = credstore
 
     @cherrypy.expose
     def authenticate(self, request=None):
         result = False
         try:
-            auth = AuthRequest(request)
+            auth = AuthRequest(request, self.credstore)
 
             log_context = {'client': cherrypy.request.remote.ip,
                            'user_id': auth.user_id(),
@@ -249,16 +259,17 @@ def main():
     """
     args = parse_args()
 
+    # initialize various components
     kdf = ndnkdf.NDNKDF(args.nettle_path)
-
     hsm_lock = threading.RLock()
     hasher = vccs_auth_hasher.hasher_from_string(args.device, hsm_lock, debug=False)
     logger = VccsLogger()
+    credstore = VCCSAuthCredentialStoreMongoDB(args.mongodb_uri, None)
 
     cherrypy.config.update( {'server.thread_pool': args.threads,
                              'server.socket_port': args.listen_port,
                              } )
-    cherrypy.quickstart(AuthBackend(hasher, kdf, logger))
+    cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore))
 
 if __name__ == '__main__':
     newname = os.path.basename(sys.argv[0])

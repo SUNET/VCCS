@@ -33,7 +33,6 @@
 # Author : Fredrik Thulin <fredrik@thulin.net>
 #
 
-import vccs_auth_common
 from vccs_auth_common import VCCSAuthenticationError
 
 class VccsPasswordFactor():
@@ -49,19 +48,30 @@ class VccsPasswordFactor():
 
     _MIN_ITERATIONS = 5000
     _MAX_ITERATIONS = 100000
-    _NDNv1_DIGEST_SIZE = 64
 
-    def __init__(self, req, user_id):
+    def __init__(self, req, user_id, credstore):
         self.type = 'password'
         self._user_id = str(user_id)
         self._H1 = str(req['H1'])
-        self._credential_id = str(req['credential_id'])
-        (self._salt_version, self._kdf, self._key_handle, self._iterations, self._credential_stored_hash) = \
-            self._parse_credential_hash(req['credential'])
-        if self._salt_version == 'NDNv1':
-            # check if the stored hash has any chance of matching our hash output, before computing
-            if len(self._credential_stored_hash) != (self._NDNv1_DIGEST_SIZE * 2):
-                raise VCCSAuthenticationError("Bad NDNv1 credential hash : {!r}".format(self._credential_stored_hash))
+        self.cred = credstore.get_credential(req['credential_id'])
+        if not self.cred:
+            raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
+
+        if self.cred.version() != 'NDNv1':
+            raise VCCSAuthenticationError("Unknown credential version: {!r}".format(
+                    self.cred))
+
+        # too few iterations is insecure, too large might be a DoS
+        if self.cred.iterations() < self._MIN_ITERATIONS or \
+                self.cred.iterations() > self._MAX_ITERATIONS:
+            raise VCCSAuthenticationError("Bad NDNv1 iterations count: {}".format(
+                    self.cred.iterations()))
+
+        # 16 bytes minimum (pwhash is hex encoded, so 32)
+        if len(self.cred.derived_key()) < 32:
+            raise VCCSAuthenticationError("Bad NDNv1 derived_key length: {}".format(
+                    len(self.cred.derived_key())))
+
 
     def authenticate(self, hasher, kdf, logger):
         """
@@ -81,66 +91,35 @@ class VccsPasswordFactor():
         """
 
         # Lock down key usage & credential to auth
-        T = '|'.join(['A', self.user_id(), self.cred_id(), self.H1()])
+        T = '|'.join(['A', self.user_id(), self.cred.id(), self.H1()])
 
         try:
-            salt = hasher.safe_hmac_sha1(self.key_handle(), T)
+            salt = hasher.safe_hmac_sha1(self.cred.key_handle(), T)
         except Exception, e:
             raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
 
         # Go from 192+160=352 to 512 bits
-        H2 = kdf.pbkdf2_hmac_sha512(T, self.iterations(), salt)
+        H2 = kdf.pbkdf2_hmac_sha512(T, self.cred.iterations(), salt)
 
-        self._audit_log(logger, self.cred_id(), H2, self.cred_hash())
+        self._audit_log(logger, H2, self.cred)
 
-        return (H2.encode('hex') == self.cred_hash())
+        return (H2.encode('hex') == self.cred.derived_key())
 
-    def _audit_log(self, logger, credential_id, H2, credential_stored_hash):
+    def _audit_log(self, logger, H2, cred):
         """
         Create audit trail.
+
+        Avoid logging the full hashes to make the audit logs less sensitive.
+        16 chars (8 bytes) should still be unique enough for 'all' purposes.
         """
         H2_hex = H2.encode('hex')
-        if H2_hex == credential_stored_hash:
-            logger.audit("result=OK, factor=password, credential_id={cid!r}, H2={h2!r}".format( \
-                    cid = credential_id, h2 = H2_hex))
+        if H2_hex == cred.derived_key():
+            logger.audit("result=OK, factor=password, credential_id={cid!r}, H2[16]={h2!r}".format( \
+                    cid = cred.id(), h2 = H2_hex[:16]))
         else:
-            logger.audit("result=FAIL, factor=password, credential_id={cid!r}, H2={h2!r}, stored={stored!r}".format( \
-                    cid = credential_id, h2 = H2_hex, stored = credential_stored_hash))
-
-    def _parse_credential_hash(self, data):
-        """
-        Parse credential_stored_hash received from frontend.
-        (format: $NDNv1$hex_key_handle$iterations$pwhash-as-hex$)
-        """
-        cred_parts = data.split('$')
-        if len(cred_parts) > 1 and cred_parts[1] == 'NDNv1':
-            try:
-                (_empty, _kdfver, key_handle, iterations, pwhash, _empty,) = cred_parts
-                if not pwhash:
-                    raise ValueError
-            except ValueError, e:
-                raise VCCSAuthenticationError("Bad NDNv1 salt : {!r}".format(cred_parts))
-
-            try:
-                # decode hex
-                key_handle = int(key_handle, 16)
-            except ValueError:
-                raise VCCSAuthenticationError("Invalid NDNv1 key_handle: {!r}".format(key_handle))
-
-            # too few iterations is insecure, too large might be a DoS
-            try:
-                iterations = int(iterations)
-            except ValueError:
-                raise VCCSAuthenticationError("Bad NDNv1 iterations: {!r}".format(iterations))
-            if iterations < self._MIN_ITERATIONS or iterations > self._MAX_ITERATIONS:
-                raise VCCSAuthenticationError("Bad NDNv1 iterations count: {}".format(iterations))
-
-            # 16 bytes minimum (pwhash is hex encoded, so 32)
-            if len(pwhash) < 32:
-                raise VCCSAuthenticationError("Bad NDNv1 pwhash length: {}".format(len(pwhash)))
-            return(cred_parts[1], 'PBKDF2-HMAC-SHA512', key_handle, iterations, pwhash)
-        else:
-            raise VCCSAuthenticationError("Unknown salt format : {!r}".format(data))
+            logger.audit(("result=FAIL, factor=password, credential_id={cid!r}, "
+                          "H2[16]={h2!r}, stored[16]={stored!r}").format( \
+                    cid = cred.id(), h2 = H2_hex[:16], stored = cred.derived_key()[:16]))
 
     def H1(self):
         """
@@ -155,40 +134,3 @@ class VccsPasswordFactor():
         sent to backend as part of authentication request.
         """
         return self._user_id
-
-    def cred_id(self):
-        """
-        The credential id, fetched from userdb on authentication frontend and
-        sent to backend as part of authentication request.
-        """
-        return self._credential_id
-
-    def cred_hash(self):
-        """
-        The credentials stored hash, fetched from userdb on authentication
-        frontend and sent to backend as part of authentication request.
-        """
-        return self._credential_stored_hash
-
-    def kdf(self):
-        """
-        The Key Derivation Function in use. Encoded in the credential_stored_salt2
-        the frontend sends to the backend as part of authentication request.
-
-        Currently this backend only supports KDF 'PBKDF2-HMAC-SHA512'.
-        """
-        return self._kdf
-
-    def key_handle(self):
-        """
-        The iterations to pass to the KDF. Encoded in the credential_stored_salt2
-        the frontend sends to the backend as part of authentication request.
-        """
-        return self._key_handle
-
-    def iterations(self):
-        """
-        The iterations to pass to the KDF. Encoded in the credential_stored_salt2
-        the frontend sends to the backend as part of authentication request.
-        """
-        return self._iterations
