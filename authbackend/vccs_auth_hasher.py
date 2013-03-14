@@ -95,5 +95,6 @@ def hasher_from_string(name, lock = None, debug = False):
         mode = os.stat(name).st_mode
         if stat.S_ISCHR(mode):
             return VccsYhsmHasher(name, lock, debug)
+        raise ValueError("Not a character device : {!r}".format(name))
     except OSError:
-        raise ValueError("Unknown hasher '{}'".format(mode))
+        raise ValueError("Unknown hasher {!r}".format(name))
