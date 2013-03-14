@@ -33,7 +33,7 @@
 # Author : Fredrik Thulin <fredrik@thulin.net>
 #
 
-class AuthenticationError(Exception):
+class VCCSAuthenticationError(Exception):
     """
     Authentication backend Exception class.
     """

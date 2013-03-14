@@ -39,7 +39,7 @@ import struct
 import pyhsm.oath_hotp
 
 import vccs_auth_common
-from vccs_auth_common import AuthenticationError
+from vccs_auth_common import VCCSAuthenticationError
 
 _OATH_TOTP_TIME_DIVIDER = 30
 
@@ -88,7 +88,7 @@ class OathCommon():
                     hasher.load_temp_key(self._nonce, self._key_handle, self._aead)
                     hmac_result = hasher.hmac_sha1(pyhsm.defines.YSM_TEMP_KEY_HANDLE, counter).get_hash()
                 except Exception, e:
-                    raise AuthenticationError("Hashing operation failed : {!s}".format(e))
+                    raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
 
                     this_code = pyhsm.oath_hotp.truncate(hmac_result, length=self._digits)
                     #print "OATH: counter=%i, user_code=%i, this_code=%i" % (start_counter + offset, code, this_code)
@@ -114,21 +114,21 @@ class OathCommon():
                 if not aead_str:
                     raise ValueError
             except ValueError, e:
-                raise AuthenticationError("Bad NDNv1 AEAD : {!r}".format(aead_parts))
+                raise VCCSAuthenticationError("Bad NDNv1 AEAD : {!r}".format(aead_parts))
 
             try:
                 # decode hex
                 key_handle = int(key_handle, 16)
             except ValueError:
-                raise AuthenticationError("Invalid NDNv1 AEAD key_handle: {!r}".format(key_handle))
+                raise VCCSAuthenticationError("Invalid NDNv1 AEAD key_handle: {!r}".format(key_handle))
 
             # AEADs are 20 bytes HMAC secret, 4 bytes YHSM flags, 8 bytes YHSM MAC -- 32 bytes
             aead = aead_str.decode('hex')
             if len(aead) != 32:
-                raise AuthenticationError("Bad NDNv1 AEAD length: {}".format(len(aead)))
+                raise VCCSAuthenticationError("Bad NDNv1 AEAD length: {}".format(len(aead)))
             return(aead_parts[1], key_handle, nonce.decode('hex'), aead)
         else:
-            raise AuthenticationError("Unknown AEAD format : {!r}".format(data))
+            raise VCCSAuthenticationError("Unknown AEAD format : {!r}".format(data))
 
 class OathHotpFactor(OathCommon):
     """

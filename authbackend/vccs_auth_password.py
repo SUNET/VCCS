@@ -34,7 +34,7 @@
 #
 
 import vccs_auth_common
-from vccs_auth_common import AuthenticationError
+from vccs_auth_common import VCCSAuthenticationError
 
 class VccsPasswordFactor():
     """
@@ -61,7 +61,7 @@ class VccsPasswordFactor():
         if self._salt_version == 'NDNv1':
             # check if the stored hash has any chance of matching our hash output, before computing
             if len(self._credential_stored_hash) != (self._NDNv1_DIGEST_SIZE * 2):
-                raise AuthenticationError("Bad NDNv1 credential hash : {!r}".format(self._credential_stored_hash))
+                raise VCCSAuthenticationError("Bad NDNv1 credential hash : {!r}".format(self._credential_stored_hash))
 
     def authenticate(self, hasher, kdf, logger):
         """
@@ -86,7 +86,7 @@ class VccsPasswordFactor():
         try:
             salt = hasher.safe_hmac_sha1(self.key_handle(), T)
         except Exception, e:
-            raise AuthenticationError("Hashing operation failed : {!s}".format(e))
+            raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
 
         # Go from 192+160=352 to 512 bits
         H2 = kdf.pbkdf2_hmac_sha512(T, self.iterations(), salt)
@@ -119,28 +119,28 @@ class VccsPasswordFactor():
                 if not pwhash:
                     raise ValueError
             except ValueError, e:
-                raise AuthenticationError("Bad NDNv1 salt : {!r}".format(cred_parts))
+                raise VCCSAuthenticationError("Bad NDNv1 salt : {!r}".format(cred_parts))
 
             try:
                 # decode hex
                 key_handle = int(key_handle, 16)
             except ValueError:
-                raise AuthenticationError("Invalid NDNv1 key_handle: {!r}".format(key_handle))
+                raise VCCSAuthenticationError("Invalid NDNv1 key_handle: {!r}".format(key_handle))
 
             # too few iterations is insecure, too large might be a DoS
             try:
                 iterations = int(iterations)
             except ValueError:
-                raise AuthenticationError("Bad NDNv1 iterations: {!r}".format(iterations))
+                raise VCCSAuthenticationError("Bad NDNv1 iterations: {!r}".format(iterations))
             if iterations < self._MIN_ITERATIONS or iterations > self._MAX_ITERATIONS:
-                raise AuthenticationError("Bad NDNv1 iterations count: {}".format(iterations))
+                raise VCCSAuthenticationError("Bad NDNv1 iterations count: {}".format(iterations))
 
             # 16 bytes minimum (pwhash is hex encoded, so 32)
             if len(pwhash) < 32:
-                raise AuthenticationError("Bad NDNv1 pwhash length: {}".format(len(pwhash)))
+                raise VCCSAuthenticationError("Bad NDNv1 pwhash length: {}".format(len(pwhash)))
             return(cred_parts[1], 'PBKDF2-HMAC-SHA512', key_handle, iterations, pwhash)
         else:
-            raise AuthenticationError("Unknown salt format : {!r}".format(data))
+            raise VCCSAuthenticationError("Unknown salt format : {!r}".format(data))
 
     def H1(self):
         """
@@ -175,7 +175,7 @@ class VccsPasswordFactor():
         The Key Derivation Function in use. Encoded in the credential_stored_salt2
         the frontend sends to the backend as part of authentication request.
 
-        Currently this backend only supports KDF 'NDNv1'.
+        Currently this backend only supports KDF 'PBKDF2-HMAC-SHA512'.
         """
         return self._kdf
 
