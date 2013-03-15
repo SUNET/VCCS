@@ -130,12 +130,11 @@ class AuthRequest():
             "user_id": "something-uniquely-identifying-user",
             "factors": [
                 {
-                    "H1": "$2a$08$Ahy51oCM6Vg6d.1ScOPxsebGxtrT15Jt6Ovqcq4amvsx47wVP9EBy",
+                    "H1": "227ALNnVn0y1IuhmbsjmlsCHDLIJ5xq",
                     "credential_id": "4711",
                     "type": "password"
                 },
                 {
-                    "credential_aead": "$NDNv1$0x2001$000000003c00$ffe5ce9cb3ff406bbc65931ac6e1ea5302455b3e161f41da34947eecac201d7e$",
                     "credential_id": 4712,
                     "type": "oath-totp",
                     "user_code": "893712"
@@ -160,11 +159,11 @@ class AuthRequest():
         self._factors = []
         for factor in req['factors']:
             if factor['type'] == 'password':
-                self._factors.append(vccs_auth_password.VccsPasswordFactor(factor, self._user_id, credstore))
+                self._factors.append(vccs_auth_password.VCCSPasswordFactor(factor, self._user_id, credstore))
             elif factor['type'] == 'oath-hotp' :
-                self._factors.append(vccs_auth_oath.OathHotpFactor(factor))
+                self._factors.append(vccs_auth_oath.OATHHOTPFactor(factor, credstore))
             elif factor['type'] == 'oath-totp' :
-                self._factors.append(vccs_auth_oath.OathTotpFactor(factor))
+                self._factors.append(vccs_auth_oath.OATHTOTPFactor(factor, credstore))
             else:
                 # eventually fail on unknown type, but continue processing to consume any OTPs
                 self._factors.append(FailFactor('Unknown authentication factor type : {!r}'.format(factor['type'])))
@@ -187,7 +186,7 @@ class FailFactor():
         logger.audit("result=FAIL, factor=fail, reason={}".format(self.reason))
         return False
 
-class VccsLogger():
+class VCCSLogger():
     def __init__(self, context = '', debug = False):
         self.context = context
 
@@ -263,7 +262,7 @@ def main():
     kdf = ndnkdf.NDNKDF(args.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth_hasher.hasher_from_string(args.device, hsm_lock, debug=False)
-    logger = VccsLogger()
+    logger = VCCSLogger()
     credstore = VCCSAuthCredentialStoreMongoDB(args.mongodb_uri, None)
 
     cherrypy.config.update( {'server.thread_pool': args.threads,

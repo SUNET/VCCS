@@ -37,7 +37,7 @@ import os
 import stat
 import pyhsm
 
-class VccsYhsmHasher():
+class VCCSYHSMHasher():
 
     def __init__(self, device, lock, debug):
         self.yhsm = pyhsm.base.YHSM(device, debug)
@@ -94,7 +94,7 @@ def hasher_from_string(name, lock = None, debug = False):
     try:
         mode = os.stat(name).st_mode
         if stat.S_ISCHR(mode):
-            return VccsYhsmHasher(name, lock, debug)
+            return VCCSYHSMHasher(name, lock, debug)
         raise ValueError("Not a character device : {!r}".format(name))
     except OSError:
         raise ValueError("Unknown hasher {!r}".format(name))

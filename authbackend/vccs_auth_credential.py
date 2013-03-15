@@ -202,5 +202,7 @@ def from_dict(data, metadata, check_revoked=True):
     credtype = data.get('type')
     if credtype == 'password':
         return VCCSAuthPasswordCredential(data, metadata, check_revoked)
+    elif credtype == 'oath':
+        return VCCSAuthOATHCredential(data, metadata, check_revoked)
     else:
         raise ValueError("Bad 'type': {!r}".format(credtype))

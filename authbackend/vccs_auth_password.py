@@ -35,7 +35,7 @@
 
 from vccs_auth_common import VCCSAuthenticationError
 
-class VccsPasswordFactor():
+class VCCSPasswordFactor():
     """
     Password authentication factor.
 
@@ -87,7 +87,7 @@ class VccsPasswordFactor():
 
         return (H2 == credential_stored_hash)
 
-        See the README file for a longer reasoning about this scheme.
+        See the VCCS/README file for a longer reasoning about this scheme.
         """
 
         # Lock down key usage & credential to auth

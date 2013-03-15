@@ -43,7 +43,7 @@ from vccs_auth_common import VCCSAuthenticationError
 
 _OATH_TOTP_TIME_DIVIDER = 30
 
-class OathCommon():
+class OATHCommon():
     """
     Base class for authentication factors based on the OATH-HOTP algorithm
     specified in RFC4226. Currently, these is event based and time based.
@@ -130,7 +130,7 @@ class OathCommon():
         else:
             raise VCCSAuthenticationError("Unknown AEAD format : {!r}".format(data))
 
-class OathHotpFactor(OathCommon):
+class OATHHOTPFactor(OATHCommon):
     """
     OATH-HOTP (event based) authentication.
 
@@ -147,7 +147,7 @@ class OathHotpFactor(OathCommon):
     attacker is sure to guess the right code in a rather short timeframe.
     """
     def __init__(self, req):
-        OathCommon.__init__(self, req)
+        OATHCommon.__init__(self, req)
         self.type = 'oath-hotp'
         self._credential_stored_counter = req['credential_stored_counter']
 
@@ -157,7 +157,7 @@ class OathHotpFactor(OathCommon):
         res = self._look_for_match(self._credential_stored_counter, offsets, hasher, logger)
         return res
 
-class OathTotpFactor(OathCommon):
+class OATHTOTPFactor(OATHCommon):
     """
     OATH-TOTP (time based) authentication.
 
@@ -169,7 +169,7 @@ class OathTotpFactor(OathCommon):
     the code - meaning we accept the current expected code, and the last one.
     """
     def __init__(self, req):
-        OathCommon.__init__(self, req)
+        OATHCommon.__init__(self, req)
         self.type = 'oath-totp'
 
     def authenticate(self, hasher, _kdf, logger):
