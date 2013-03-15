@@ -16,7 +16,6 @@ like this :
             {
               "H1": "$2a$08$Ahy51oCM6Vg6d.1ScOPxse<snip bcrypt hash>7wVP9EBy",
               "credential_id": "4711",
-              "credential_stored_hash": "72d916f97<snip HMAC-SHA-512 hash>ed",
               "type": "password"
             }
           ]
