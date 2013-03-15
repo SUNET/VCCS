@@ -81,11 +81,19 @@ class OATHCommon():
         """
         hasher.lock_acquire()
         try:
+            try:
+                if not hasher.load_temp_key(self.cred.nonce(),
+                                            self.cred.key_handle(),
+                                            self.cred.aead()
+                                            ):
+                    raise VCCSAuthenticationError("Loading HMAC key failed")
+            except Exception, e:
+                raise VCCSAuthenticationError("Loading HMAC key failed : {!s}".format(e))
+
             for offset in offsets:
                 counter = struct.pack("> Q", start_counter + offset)
 
                 try:
-                    hasher.load_temp_key(self._nonce, self._key_handle, self._aead)
                     hmac_result = hasher.hmac_sha1(pyhsm.defines.YSM_TEMP_KEY_HANDLE, counter).get_hash()
                 except Exception, e:
                     raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
