@@ -39,6 +39,11 @@ Authentication credential data objects.
 
 from vccs_auth_common import VCCSAuthenticationError
 
+_VALID_STATUS_VALUES = ['active', 'revoked']
+
+_VALID_OATH_CODE_LENGTHS = [6, 8]
+_VALID_OATH_TYPES = ['hotp', 'totp']
+
 class VCCSAuthCredentialError(VCCSAuthenticationError):
     pass
 
@@ -61,7 +66,7 @@ class VCCSAuthCredential():
         """
         val = self._data['status']
         if new is not None:
-            if new not in ['active', 'revoked']:
+            if new not in _VALID_STATUS_VALUES:
                 raise ValueError("Invalid 'status' value: {!r}".format(new))
             if val == 'revoked' and new != 'revoked':
                 # In VCCS, you add new credentials rather than resurrecting revoked ones
@@ -166,13 +171,13 @@ class VCCSAuthPasswordCredential(VCCSAuthCredential):
     def derived_key(self, new=None):
         val = self._data['derived_key']
         if new is not None:
-            if not isinstance(new, basestring) or new < 0:
+            if not isinstance(new, basestring):
                 raise ValueError("Invalid 'derived_key': {!r}".format(new))
             if len(new) == 64:
                 # 64 byte digests for HMAC-SHA-512
                 new = new.encode('hex')
             if len(new) != 128:
-                raise ValueError("Invalid 'derived_key' (expect 128 chars hex encoded): {!r}".format(new))
+                raise ValueError("Invalid 'derived_key' (expect 128 chars hex string): {!r}".format(new))
             self._data['derived_key'] = new
         return val
 
@@ -189,6 +194,86 @@ class VCCSAuthPasswordCredential(VCCSAuthCredential):
             iter_=self.iterations(),
             kh=self.key_handle(),
             )
+
+class VCCSAuthOATHCredential(VCCSAuthCredential):
+
+    def __init__(self, data, metadata, check_revoked):
+        VCCSAuthCredential.__init__(self, data, metadata, check_revoked)
+
+        # validate known data specific to this class
+        self.version(self._data['version'])
+        self.key_handle(self._data['key_handle'])
+        self.nonce(self._data['nonce'])
+        self.aead(self._data['aead'])
+        self.digits(self._data['digits'])
+        self.oath_type(self._data['oath_type'])
+        self.oath_counter(self._data['oath_counter'])
+
+    def version(self, new=None):
+        val = self._data['version']
+        if new is not None:
+            if new != 'NDNv1':
+                raise ValueError("Invalid 'version': {!r}".format(new))
+            self._data['version'] = str(new)
+        return val
+
+    def key_handle(self, new=None):
+        val = self._data['key_handle']
+        if new is not None:
+            if not isinstance(new, int) or new < 0:
+                raise ValueError("Invalid 'key_handle': {!r}".format(new))
+            self._data['key_handle'] = new
+        return val
+
+    def nonce(self, new=None):
+        val = self._data['nonce']
+        if new is not None:
+            if not isinstance(new, basestring):
+                raise ValueError("Invalid 'nonce': {!r}".format(new))
+            if len(new) == 12:
+                new = new.encode('hex')
+            if len(new) != 24:
+                raise ValueError("Invalid 'derived_key' (expect 128 chars hex string): {!r}".format(new))
+            self._data['derived_key'] = new
+        return val
+
+    def aead(self, new=None):
+        val = self._data['aead']
+        if new is not None:
+            if not isinstance(new, basestring):
+                raise ValueError("Invalid 'aead': {!r}".format(new))
+            # AEADs are 20 bytes HMAC secret, 4 bytes YHSM flags, 8 bytes YHSM MAC -- 32 bytes
+            if len(new) == 32:
+                new = new.encode('hex')
+            if len(new) != 64:
+                raise ValueError("Invalid 'aead' (expect 64 chars hex string): {!r}".format(new))
+            self._data['aead'] = new
+        return val
+
+    def digits(self, new=None):
+        val = self._data['digits']
+        if new is not None:
+            if new not in _VALID_OATH_CODE_LENGTHS:
+                raise ValueError("Invalid 'digits': {!r}".format(new))
+            self._data['digits'] = new
+        return val
+
+    def oath_type(self, new=None):
+        val = self._data['oath_type']
+        if new is not None:
+            if new not in _VALID_OATH_TYPES:
+                raise ValueError("Invalid 'oath_type': {!r}".format(new))
+            self._data['oath_type'] = new
+        return val
+
+    def oath_counter(self, new=None):
+        val = self._data['oath_counter']
+        if new is not None:
+            if not isinstance(new, int) or new < 0:
+                raise ValueError("Invalid 'oath_counter': {!r}".format(new))
+            self._data['oath_counter'] = new
+        return val
+
 
 def from_dict(data, metadata, check_revoked=True):
     """

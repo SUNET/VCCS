@@ -1,14 +1,17 @@
 #!/usr/bin/python
 #
+# Produce example OATH JSON to be POSTed to authbackend
 #
-# This requires access to a test YubiHSM
 #
 # HSM> keyload
 # 00002001,2001200120012001200120012001200120012001200120012001200120012001
 # HSM> keycommit
 #
+# $ ./example-oath-json | curl --data-urlencode request@- -v localhost:8080/authenticate
+#
 
 import os
+import sys
 import hmac
 import json
 import time
@@ -17,40 +20,23 @@ import struct
 import hashlib
 import pyhsm.oath_hotp
 
-default_device = "/dev/ttyACM0"
-key_handle = 0x2001
-nonce = ''
 debug = False
 
-hsm = pyhsm.base.YHSM(device = default_device, debug = debug)
-
 nist_test_key = '303132333435363738393a3b3c3d3e3f40414243'.decode('hex')
-flags = struct.pack("< I", pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
 
-data = nist_test_key + flags
-
-try:
-    aead = hsm.generate_aead_simple(nonce, key_handle, data)
-    aead_str = '$'.join(['', 'NDNv1', hex(aead.key_handle), aead.nonce.encode('hex'), aead.data.encode('hex'), ''])
-except:
-    # cached value of nist_test_key+flags using key handle 0x2001, in case we have
-    # a validating HSM instead of an originating one
-    aead = None
-    aead_str = "$NDNv1$0x2001$000000003c00$ffe5ce9cb3ff406bbc65931ac6e1ea5302455b3e161f41da34947eecac201d7e$"
-
-print "AEAD: %s" % (aead)
-print "AEAD: %s" % (aead_str)
+def oath_code(hmac_key, counter, length=6):
+    counter = struct.pack("> Q", counter)
+    hmac_result = hmac.new(nist_test_key, counter, hashlib.sha1).digest()
+    code = pyhsm.oath_hotp.truncate(hmac_result, length=length)
+    fmt = "%%.%ii" % (length)  # leading zero padding
+    code_str = fmt % (code)
+    return code_str
 
 # Now, calculate an OATH code for the current time
 totp_counter = int(time.time()) / 30
-counter = struct.pack("> Q", totp_counter)
-hmac_result = hmac.new(nist_test_key, counter, hashlib.sha1).digest()
-length = 6
-code = pyhsm.oath_hotp.truncate(hmac_result, length=length)
-fmt = "%%.%ii" % (length)  # leading zero padding
-code_str = fmt % (code)
+code_str = oath_code(nist_test_key, totp_counter)
 
-print "OATH-TOTP code : %s (for counter=%i)" % (code_str, totp_counter)
+sys.stderr.write("OATH-TOTP code : %s (for counter=%i)\n" % (code_str, totp_counter))
 
 a = {'auth':
          {'version': 1,
@@ -58,7 +44,6 @@ a = {'auth':
           'factors': [
             {'type': 'oath-totp',
              'credential_id': 4711,
-             'credential_aead': aead_str,
              'user_code': code_str,
              }
             ]
@@ -67,29 +52,5 @@ a = {'auth':
 
 print json.dumps(a, sort_keys=True, indent=4)
 
+sys.stderr.write("\nCan't test HOTP since we can't know what counter to use\n")
 
-# Now, calculate an OATH code for event based token
-hotp_counter = ord(os.urandom(1))
-counter = struct.pack("> Q", hotp_counter)
-hmac_result = hmac.new(nist_test_key, counter, hashlib.sha1).digest()
-length = 6
-code = pyhsm.oath_hotp.truncate(hmac_result, length=length)
-fmt = "%%.%ii" % (length)
-code_str = fmt % (code)
-
-print "OATH-HOTP code : %s (for counter=%i)" % (code_str, hotp_counter)
-
-a = {'auth':
-         {'version': 1,
-          'factors': [
-            {'type': 'oath-hotp',
-             'credential_id': 4711,
-             'credential_aead': aead_str,
-             'credential_stored_counter': hotp_counter,
-             'user_code': code_str,
-             }
-            ]
-          }
-     }
-
-print json.dumps(a, sort_keys=True, indent=4)

@@ -137,7 +137,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
                 }
         return self.credentials.insert(docu)
 
-    def update_credential(self, cred):
+    def update_credential(self, cred, safe=True):
         """
         Update an existing credential in the MongoDB collection.
 
@@ -155,4 +155,4 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         data = {'revision': metadata['revision'] + 1,
                 'credential': cred.to_dict(),
                 }
-        return self.credentials.update(spec, {'$set': data})
+        return self.credentials.update(spec, {'$set': data}, safe=safe)

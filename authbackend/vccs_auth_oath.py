@@ -54,15 +54,18 @@ class OATHCommon():
     code with previous ones to make sure it hasn't been used in a previous
     request, or a simultaneous request to another frontend server.
     """
-    def __init__(self, req):
-        (self._aead_version, self._key_handle, self._nonce, self._aead) = \
-            self._parse_credential_aead(req['credential_aead'])
-        self._credential_id = str(req['credential_id'])
+    def __init__(self, req, credstore):
+        self.credstore = credstore
+        self.cred = credstore.get_credential(req['credential_id'])
+        if not self.cred:
+            raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
+
+        if self.cred.version() != 'NDNv1':
+            raise VCCSAuthenticationError("Unknown credential version: {!r}".format(
+                    self.cred))
+
         self.type = 'unknown' # overwrite in subclass __init__
-        # user_code needs to be a string, since we use len() on it to figure out number
-        # of digits (and the code might start with '0')
         self._user_code = int(req['user_code'])
-        self._digits = len(req['user_code'])
 
     def authenticate(self, hasher, kdf, logger):
         """
@@ -98,45 +101,36 @@ class OATHCommon():
                 except Exception, e:
                     raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
 
-                    this_code = pyhsm.oath_hotp.truncate(hmac_result, length=self._digits)
+                    this_code = pyhsm.oath_hotp.truncate(hmac_result, length=self.cred.digits())
                     #print "OATH: counter=%i, user_code=%i, this_code=%i" % (start_counter + offset, code, this_code)
                     if this_code == self._user_code:
-                        logger.audit("result=OK, factor={name}, counter={ctr!r}, offset={offs!r}".format( \
-                                name = self.type, ctr = start_counter, offs = offset))
-                        return True
+                        # Make sure this OTP has in fact not been used before
+                        if self._increase_oath_counter(start_counter, offset, logger):
+                            logger.audit("result=OK, factor={name}, counter={ctr!r}, offset={offs!r}".format( \
+                                    name = self.type, ctr = start_counter, offs = offset))
+                            return True
+                        else:
+                            return False
         finally:
             hasher.lock_release()
         logger.audit("result=FAIL, factor={name}, counter={ctr!r}, offsets={offsets!r}".format( \
                 name = self.type, ctr = start_counter, offsets = offsets))
         return False
 
-    def _parse_credential_aead(self, data):
+    def _increase_oath_counter(self, start_counter, offset, logger):
         """
-        Parse credential_aead received from frontend.
-        (format: $NDNv1$hex_key_handle$nonce$aead$)
+        Update counter value of credential in database provided that the new counter
+        is greater than (NOT equal) to the current value.
         """
-        aead_parts = data.split('$')
-        if len(aead_parts) > 1 and aead_parts[1] == 'NDNv1':
-            try:
-                (_empty, _aeadver, key_handle, nonce, aead_str, _empty,) = aead_parts
-                if not aead_str:
-                    raise ValueError
-            except ValueError, e:
-                raise VCCSAuthenticationError("Bad NDNv1 AEAD : {!r}".format(aead_parts))
+        counter = start_counter + offset
+        if counter <= self.cred.oath_counter():
+            logger.audit(("result=FAIL, factor={name}, counter={ctr!r}, "
+                          "offset={offs!r}, reason=OTP_REUSE").format( \
+                    name = self.type, ctr = start_counter, offs = offset))
+            return False
+        self.cred.oath_counter(counter)
+        return self.credstore.update_credential(self.cred, safe=True)
 
-            try:
-                # decode hex
-                key_handle = int(key_handle, 16)
-            except ValueError:
-                raise VCCSAuthenticationError("Invalid NDNv1 AEAD key_handle: {!r}".format(key_handle))
-
-            # AEADs are 20 bytes HMAC secret, 4 bytes YHSM flags, 8 bytes YHSM MAC -- 32 bytes
-            aead = aead_str.decode('hex')
-            if len(aead) != 32:
-                raise VCCSAuthenticationError("Bad NDNv1 AEAD length: {}".format(len(aead)))
-            return(aead_parts[1], key_handle, nonce.decode('hex'), aead)
-        else:
-            raise VCCSAuthenticationError("Unknown AEAD format : {!r}".format(data))
 
 class OATHHOTPFactor(OATHCommon):
     """
@@ -154,15 +148,14 @@ class OATHHOTPFactor(OATHCommon):
     locked, that is a 1 in 47619 chance. With enough accounts to guess against, the
     attacker is sure to guess the right code in a rather short timeframe.
     """
-    def __init__(self, req):
-        OATHCommon.__init__(self, req)
+    def __init__(self, req, credstore):
+        OATHCommon.__init__(self, req, credstore)
         self.type = 'oath-hotp'
-        self._credential_stored_counter = req['credential_stored_counter']
 
     def authenticate(self, hasher, _kdf, logger):
         # Compare the user supplied code with expected, expected + 1, ... expected + 3
-        offsets = [0, 1, 2, 3]
-        res = self._look_for_match(self._credential_stored_counter, offsets, hasher, logger)
+        offsets = [1, 2, 3, 4]
+        res = self._look_for_match(self.cred.oath_counter(), offsets, hasher, logger)
         return res
 
 class OATHTOTPFactor(OATHCommon):
@@ -176,8 +169,8 @@ class OATHTOTPFactor(OATHCommon):
     the only thing we compensate for is the user (or network) being slow in entering
     the code - meaning we accept the current expected code, and the last one.
     """
-    def __init__(self, req):
-        OATHCommon.__init__(self, req)
+    def __init__(self, req, credstore):
+        OATHCommon.__init__(self, req, credstore)
         self.type = 'oath-totp'
 
     def authenticate(self, hasher, _kdf, logger):
