@@ -79,9 +79,10 @@ class VCCSPasswordFactor():
 
         On backend :
         ------------
-        T = 'A' | user_id | credential_id | H1  // Lock down key usage & credential to auth
-        salt = yhsm_hmac_sha1(T)
-        H2 = PBKDF2-HMAC-SHA512(T, salt)        // Go from 192+160=352 to 512 bits
+        T1 = 'A' | user_id | credential_id | H1
+        T2 = PBKDF2-HMAC-SHA512(T1, iterations=many, salt)
+        local_salt = yhsm_hmac_sha1(T2)
+        H2 = PBKDF2-HMAC-SHA512(T2, iterations=1, local_salt)
 
         audit_log(frontend_id, credential_id, H2, credential_stored_hash)
 
@@ -91,15 +92,23 @@ class VCCSPasswordFactor():
         """
 
         # Lock down key usage & credential to auth
-        T = '|'.join(['A', self.user_id(), self.cred.id(), self.H1()])
+        T1 = '|'.join(['A', self.user_id(), self.cred.id(), self.H1()])
+
+        # This is the really time consuming PBKDF2 step.
+        T2 = kdf.pbkdf2_hmac_sha512(T1, self.cred.iterations(), self.cred.salt_as_bytes())
 
         try:
-            salt = hasher.safe_hmac_sha1(self.cred.key_handle(), T)
+            # If speed becomes an issue, truncating T2 to 48 bytes would decrease the
+            # time it takes the YubiHSM to compute the HMAC-SHA-1 from around 1.9 ms
+            # to around 1.2 ms.
+            #
+            # The difference is likely due to > 48 bytes requiring more USB transactions.
+            local_salt = hasher.safe_hmac_sha1(self.cred.key_handle(), T2)
         except Exception, e:
             raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
 
-        # Go from 192+160=352 to 512 bits
-        H2 = kdf.pbkdf2_hmac_sha512(T, self.cred.iterations(), salt)
+        # PBKDF2 again with iter=1 to mix in the local_salt into the final H2.
+        H2 = kdf.pbkdf2_hmac_sha512(T2, 1, local_salt)
 
         self._audit_log(logger, H2, self.cred)
 

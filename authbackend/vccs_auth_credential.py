@@ -135,6 +135,7 @@ class VCCSAuthPasswordCredential(VCCSAuthCredential):
         self.iterations(self._data['iterations'])
         self.key_handle(self._data['key_handle'])
         self.derived_key(self._data['derived_key'])
+        self.salt(self._data['salt'])
 
     def version(self, new=None):
         val = self._data['version']
@@ -180,6 +181,27 @@ class VCCSAuthPasswordCredential(VCCSAuthCredential):
                 raise ValueError("Invalid 'derived_key' (expect 128 chars hex string): {!r}".format(new))
             self._data['derived_key'] = new
         return val
+
+    def salt(self, new=None):
+        val = self._data['salt']
+        if new is not None:
+            if not isinstance(new, basestring):
+                raise ValueError("Invalid 'salt': {!r}".format(new))
+            try:
+                new.decode('hex')
+            except Exception:
+                raise ValueError("Non-hex string 'salt' : {!r}".format(new))
+            if len(new) < 32:
+                # require at least 128 bits of salt
+                raise ValueError("Too short 'salt' ({} < 32): {!r}".format(len(new), new))
+            self._data['salt'] = new
+        return val
+
+    def salt_as_bytes(self):
+        """
+        Convenience function to return the salt in a known format.
+        """
+        return self._data['salt'].decode('hex')
 
     def __repr__(self):
         return ('<{} instance at {:#x}: id={id_!r},type={type_!r},status={status!r},'
