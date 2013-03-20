@@ -154,43 +154,6 @@ database. This second PBKDF2 step is performed to mix in the local_salt
 into T2 in a good way - just like scrypt uses PBKDF2 as the final step.
 
 
-Possible improvements
-=====================
-
-Solar Designer points out that an intruder with access to the authentication
-backend is not entirely limited to recording H1 hashes (and thus, limited to
-attacking users logging in while the intruder has access), but could also
-spend the time until disovered with calculating H1 hashes for candidate
-passwords and then use the access to the HSM to actually compute the local
-parameter (PBKDF2 salt), to then later on do an offline attack on the PBKDF2
-hashes using the now known salt. He suggests changing the current
-
-  bcrypt -> HSM -> PBKDF2
-
-into
-
-  bcrypt -> PBKDF2(iter=many) -> HSM -> PBKDF2(iter=1)
-
-to minimize the number of candidate passwords an attacker can calculate the
-PBKDF2 salt for, using temporary access to the authentication backend HSM.
-
-A possible alternative to this change (or something that ought to be done in
-addition to it) would be to keep the bcrypt salt unknown to the backends, by
-removing the salt portion from H1 before it is sent to the backends.
-
-One of these two solutions, both, (or another, yet to be thought of) will be
-implemented.
-
-
-Solar Designer further calls giving the frontends read access to the password
-hashes an "unjustified risk (even though they're useless without local
-parameter)". VCCS will adhere to this advice by separating the H2 hashes out
-of the user database accessible to the frontends into a private replicated
-database only available to the backends. This also solves another issue with
-OATH counters as well (updating OATH counter value in database before
-responding 'OK').
-
-
 Key management
 ==============
 
