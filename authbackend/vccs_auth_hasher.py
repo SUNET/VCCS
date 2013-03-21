@@ -67,6 +67,21 @@ class VCCSYHSMHasher():
     def lock_release(self):
         return self.lock.release()
 
+    def safe_random(self, byte_count):
+        """
+        Generate random bytes using both YubiHSM random function and host OS.
+
+        Acquires a lock first if a lock instance was given at creation time.
+        """
+        from_os = os.urandom(byte_count)
+        self.lock_acquire()
+        try:
+            from_hsm = self.yhsm.random(byte_count)
+            xored = ''.join([chr(ord(a) ^ ord(b)) for (a,b) in zip(from_hsm, from_os)])
+            return xored
+        finally:
+            self.lock_release()
+
 class NoOpLock():
     """
     A No-op lock class, to avoid a lot of "if self.lock:" in code using locks.
