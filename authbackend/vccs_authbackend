@@ -55,6 +55,7 @@ import simplejson
 import ndnkdf
 import vccs_auth_oath
 import vccs_auth_common
+import vccs_auth_config
 import vccs_auth_hasher
 import vccs_auth_password
 import vccs_auth_credstore
@@ -62,10 +63,8 @@ import vccs_auth_credstore
 from vccs_auth_common import VCCSAuthenticationError
 from vccs_auth_credstore import VCCSAuthCredentialStoreMongoDB
 
-default_device = "/dev/ttyACM0"
-default_threads = 8
-default_nettle_path = None
-default_mongodb_uri = "127.0.0.1"
+default_config_file = "/etc/vccs/vccs_authbackend.ini"
+default_debug = False
 
 myname = 'vccs_backend'
 
@@ -77,42 +76,17 @@ def parse_args():
                                      add_help = True,
                                      formatter_class = argparse.ArgumentDefaultsHelpFormatter,
                                      )
-    parser.add_argument('-D', '--device',
-                        dest='device',
-                        default=default_device,
-                        required=True,
-                        help='YubiHSM device',
+    parser.add_argument('-c', '--config-file',
+                        dest='config_file',
+                        default=default_config_file,
+                        help='Config file',
                         metavar='PATH',
                         )
 
-    parser.add_argument('--nettle-path',
-                        dest='nettle_path',
-                        default=default_nettle_path,
-                        required=False,
-                        help='Path to libnettle',
-                        metavar='DIR',
-                        )
-
-    parser.add_argument('-P', '--port',
-                        dest='listen_port',
-                        type=int,
-                        required=True,
-                        help='Port to listen on',
-                        metavar='PORT',
-                        )
-
-    parser.add_argument('--threads',
-                        dest='threads',
-                        type=int, default=default_threads,
-                        help='Number of (hashing) worker threads to start',
-                        metavar='NUM',
-                        )
-
-    parser.add_argument('--mongodb-uri',
-                        dest='mongodb_uri',
-                        type=str, default=default_mongodb_uri,
-                        help='MongoDB credential store',
-                        metavar='URI',
+    parser.add_argument('--debug',
+                        dest='debug',
+                        action='store_true', default=default_debug,
+                        help='Enable debug operation',
                         )
 
     return parser.parse_args()
@@ -259,14 +233,15 @@ def main():
     args = parse_args()
 
     # initialize various components
-    kdf = ndnkdf.NDNKDF(args.nettle_path)
+    config = vccs_auth_config.VCCSAuthConfig(args.config_file, args.debug)
+    kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
-    hasher = vccs_auth_hasher.hasher_from_string(args.device, hsm_lock, debug=False)
+    hasher = vccs_auth_hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
     logger = VCCSLogger()
-    credstore = VCCSAuthCredentialStoreMongoDB(args.mongodb_uri, None)
+    credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None)
 
-    cherrypy.config.update( {'server.thread_pool': args.threads,
-                             'server.socket_port': args.listen_port,
+    cherrypy.config.update( {'server.thread_pool': config.num_threads,
+                             'server.socket_port': config.listen_port,
                              } )
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore))
 
