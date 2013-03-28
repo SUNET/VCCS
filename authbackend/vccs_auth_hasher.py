@@ -37,9 +37,17 @@ import os
 import stat
 import pyhsm
 
-class VCCSYHSMHasher():
+class VCCSHasher():
+
+    def __init__(self):
+        pass
+
+    pass
+
+class VCCSYHSMHasher(VCCSHasher):
 
     def __init__(self, device, lock, debug):
+        VCCSHasher.__init__(self)
         self.yhsm = pyhsm.base.YHSM(device, debug)
         self.lock = lock
 

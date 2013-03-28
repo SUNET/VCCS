@@ -38,7 +38,7 @@ import struct
 
 import pyhsm.oath_hotp
 
-import vccs_auth_common
+import vccs_auth_credential
 from vccs_auth_common import VCCSAuthenticationError
 
 _OATH_TOTP_TIME_DIVIDER = 30
@@ -54,18 +54,66 @@ class OATHCommon():
     code with previous ones to make sure it hasn't been used in a previous
     request, or a simultaneous request to another frontend server.
     """
-    def __init__(self, req, credstore):
+    def __init__(self, action, req, credstore, config):
         self.credstore = credstore
-        self.cred = credstore.get_credential(req['credential_id'])
-        if not self.cred:
-            raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
+        config = config
+        if action == 'auth':
+            self.cred = credstore.get_credential(req['credential_id'])
+            if not self.cred:
+                raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
 
-        if self.cred.version() != 'NDNv1':
-            raise VCCSAuthenticationError("Unknown credential version: {!r}".format(
-                    self.cred))
+            if self.cred.version() != 'NDNv1':
+                raise VCCSAuthenticationError("Unknown credential version: {!r}".format(
+                        self.cred))
 
-        self.type = 'unknown' # overwrite in subclass __init__
-        self._user_code = int(req['user_code'])
+            self._user_code = int(req['user_code'])
+        elif action == 'add_creds':
+            if config.add_creds_oath_version != 'NDNv1':
+                raise VCCSAuthenticationError("Add OATH credentials of version {!r} not implemented".format(
+                        config.add_creds_password_version))
+            if not config.add_creds_oath_key_handle:
+                raise VCCSAuthenticationError("Add password credentials key_handle not set".format(
+                        config.add_creds_password_version))
+            cred_data = {'type':          self.type,
+                         'status':        'active',
+                         'version':       'NDNv1',
+                         'key_handle':    config.add_creds_oath_key_handle,
+                         'nonce':         req['nonce'],
+                         'aead':          req['aead'],
+                         'digits':        req['digits'],
+                         'credential_id': req['credential_id'],
+                         'oath_counter':  req['oath_counter'],
+                         }
+            self.cred = vccs_auth_credential.from_dict(cred_data, None)
+        else:
+            raise VCCSAuthenticationError("Unknown action {!r}".format(action))
+
+    def add_credential(self, hasher, kdf, logger):
+        """
+        Add a credential to the credential store.
+
+        The credential (OATH HMAC key) has to be provided in an AEAD generated
+        elsewhere. The YubiHSM:s connected to authentication backends should be
+        unable to generate AEAD:s through configuration.
+
+        :returns: True on success
+        """
+        hasher.lock_acquire()
+        try:
+            # test load AEAD
+            if not hasher.load_temp_key(self.cred.nonce().decode('hex'),
+                                        self.cred.key_handle(),
+                                        self.cred.aead().decode('hex'),
+                                        ):
+                raise VCCSAuthenticationError("Loading HMAC key failed")
+        except Exception, e:
+            raise VCCSAuthenticationError("Loading HMAC key failed : {!s}".format(e))
+        finally:
+            hasher.lock_release()
+        res = self.credstore.add_credential(self.cred)
+        logger.audit("Added credential credential_id={!r}, res={!r}".format(
+                self.cred.id(), res))
+        return True
 
     def authenticate(self, hasher, kdf, logger):
         """
@@ -85,9 +133,9 @@ class OATHCommon():
         hasher.lock_acquire()
         try:
             try:
-                if not hasher.load_temp_key(self.cred.nonce(),
+                if not hasher.load_temp_key(self.cred.nonce().decode('hex'),
                                             self.cred.key_handle(),
-                                            self.cred.aead()
+                                            self.cred.aead().decode('hex'),
                                             ):
                     raise VCCSAuthenticationError("Loading HMAC key failed")
             except Exception, e:
@@ -148,9 +196,9 @@ class OATHHOTPFactor(OATHCommon):
     locked, that is a 1 in 47619 chance. With enough accounts to guess against, the
     attacker is sure to guess the right code in a rather short timeframe.
     """
-    def __init__(self, req, credstore):
-        OATHCommon.__init__(self, req, credstore)
+    def __init__(self, action, req, credstore, config):
         self.type = 'oath-hotp'
+        OATHCommon.__init__(self, action, req, credstore, config)
 
     def authenticate(self, hasher, _kdf, logger):
         # Compare the user supplied code with expected, expected + 1, ... expected + 3
@@ -169,9 +217,9 @@ class OATHTOTPFactor(OATHCommon):
     the only thing we compensate for is the user (or network) being slow in entering
     the code - meaning we accept the current expected code, and the last one.
     """
-    def __init__(self, req, credstore):
-        OATHCommon.__init__(self, req, credstore)
+    def __init__(self, action, req, credstore, config):
         self.type = 'oath-totp'
+        OATHCommon.__init__(self, action, req, credstore, config)
 
     def authenticate(self, hasher, _kdf, logger):
         # Compare the user supplied code with current time, and current time - 30
@@ -179,3 +227,15 @@ class OATHTOTPFactor(OATHCommon):
         offsets = [0, -1]
         res = self._look_for_match(now, offsets, hasher, logger)
         return res
+
+def from_factor(req, action, credstore, config):
+    """
+    Part of parsing authentication/add_credentials requests received.
+
+    Figure out what kind of object should be initialized, and return it.
+    """
+    if action == 'auth' or action == 'add_creds':
+        if req['type'] == 'oath-hotp' :
+            return OATHHOTPFactor(action, req, credstore, config)
+        elif req['type'] == 'oath-totp' :
+            return OATHTOTPFactor(action, req, credstore, config)

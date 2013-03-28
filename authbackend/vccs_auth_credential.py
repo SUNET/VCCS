@@ -42,7 +42,7 @@ from vccs_auth_common import VCCSAuthenticationError
 _VALID_STATUS_VALUES = ['active', 'revoked']
 
 _VALID_OATH_CODE_LENGTHS = [6, 8]
-_VALID_OATH_TYPES = ['hotp', 'totp']
+_VALID_CREDENTIAL_TYPES = ['password', 'oath-hotp', 'oath-totp']
 
 class VCCSAuthCredentialError(VCCSAuthenticationError):
     pass
@@ -76,13 +76,13 @@ class VCCSAuthCredential():
 
     def type(self, new=None):
         """
-        Get or set credential type. Either 'password' or 'OATH'.
+        Get or set credential type. Either 'password', 'oath-hotp' or 'oath-totp'.
 
         :returns: string, value before any update
         """
         val = self._data['type']
         if new is not None:
-            if new not in ['password', 'OATH']:
+            if new not in _VALID_CREDENTIAL_TYPES:
                 raise ValueError("Invalid 'type' value: {!r}".format(new))
             self._data['type'] = str(new)
         return val
@@ -94,7 +94,6 @@ class VCCSAuthCredential():
                 raise ValueError("Invalid 'id': {!r}".format(new))
             self._data['credential_id'] = new
         return val
-
 
     def metadata(self):
         """
@@ -228,7 +227,6 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
         self.nonce(self._data['nonce'])
         self.aead(self._data['aead'])
         self.digits(self._data['digits'])
-        self.oath_type(self._data['oath_type'])
         self.oath_counter(self._data['oath_counter'])
 
     def version(self, new=None):
@@ -252,11 +250,11 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
         if new is not None:
             if not isinstance(new, basestring):
                 raise ValueError("Invalid 'nonce': {!r}".format(new))
-            if len(new) == 12:
+            if len(new) == 6:
                 new = new.encode('hex')
-            if len(new) != 24:
-                raise ValueError("Invalid 'derived_key' (expect 128 chars hex string): {!r}".format(new))
-            self._data['derived_key'] = new
+            if len(new) != 12:
+                raise ValueError("Invalid 'nonce' (expect 12 chars hex string): {!r}".format(new))
+            self._data['nonce'] = str(new)
         return val
 
     def aead(self, new=None):
@@ -269,7 +267,7 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
                 new = new.encode('hex')
             if len(new) != 64:
                 raise ValueError("Invalid 'aead' (expect 64 chars hex string): {!r}".format(new))
-            self._data['aead'] = new
+            self._data['aead'] = str(new)
         return val
 
     def digits(self, new=None):
@@ -278,14 +276,6 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
             if new not in _VALID_OATH_CODE_LENGTHS:
                 raise ValueError("Invalid 'digits': {!r}".format(new))
             self._data['digits'] = new
-        return val
-
-    def oath_type(self, new=None):
-        val = self._data['oath_type']
-        if new is not None:
-            if new not in _VALID_OATH_TYPES:
-                raise ValueError("Invalid 'oath_type': {!r}".format(new))
-            self._data['oath_type'] = new
         return val
 
     def oath_counter(self, new=None):
@@ -309,7 +299,7 @@ def from_dict(data, metadata, check_revoked=True):
     credtype = data.get('type')
     if credtype == 'password':
         return VCCSAuthPasswordCredential(data, metadata, check_revoked)
-    elif credtype == 'oath':
+    elif credtype == 'oath-hotp' or credtype == 'oath-totp':
         return VCCSAuthOATHCredential(data, metadata, check_revoked)
     else:
         raise ValueError("Bad 'type': {!r}".format(credtype))

@@ -33,6 +33,8 @@
 # Author : Fredrik Thulin <fredrik@thulin.net>
 #
 
+import vccs_auth_credential
+
 from vccs_auth_common import VCCSAuthenticationError
 
 class VCCSPasswordFactor():
@@ -45,33 +47,57 @@ class VCCSPasswordFactor():
     to never, ever, be available on a host connected to the Internet), and the use
     of the NIST approved PBKDF2-HMAC-SHA512 algorithm for key stretching.
     """
-
-    _MIN_ITERATIONS = 5000
-    _MAX_ITERATIONS = 100000
-
-    def __init__(self, req, user_id, credstore):
+    def __init__(self, action, req, user_id, credstore, config):
         self.type = 'password'
         self._user_id = str(user_id)
         self._H1 = str(req['H1'])
-        self.cred = credstore.get_credential(req['credential_id'])
-        if not self.cred:
-            raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
+        self.config = config
+        self.credstore = credstore
 
-        if self.cred.version() != 'NDNv1':
-            raise VCCSAuthenticationError("Unknown credential version: {!r}".format(
-                    self.cred))
+        if len(self._H1) != 31:
+            # A full bcrypt is 60 chars. the frontend should NOT send the whole
+            # bcrypt digest to the authentication backend. bcrypt - salt = 31.
+            raise VCCSAuthenticationError("Bad H1: {!r}".format(self._H1))
 
-        # too few iterations is insecure, too large might be a DoS
-        if self.cred.iterations() < self._MIN_ITERATIONS or \
-                self.cred.iterations() > self._MAX_ITERATIONS:
-            raise VCCSAuthenticationError("Bad NDNv1 iterations count: {}".format(
-                    self.cred.iterations()))
-
-        # 16 bytes minimum (pwhash is hex encoded, so 32)
-        if len(self.cred.derived_key()) < 32:
-            raise VCCSAuthenticationError("Bad NDNv1 derived_key length: {}".format(
-                    len(self.cred.derived_key())))
-
+        if action == 'auth':
+            self.cred = credstore.get_credential(req['credential_id'])
+            if not self.cred:
+                raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
+            if self.cred.type() != self.type:
+                raise VCCSAuthenticationError("Credential {!r} has unexpected type: {!r}".format(
+                        self.cred.type()))
+            if self.cred.version() != 'NDNv1':
+                raise VCCSAuthenticationError("Unknown credential version: {!r}".format(
+                        self.cred))
+            # too few iterations is insecure, too many might be a DoS
+            if self.cred.iterations() < config.kdf_min_iterations or \
+                    self.cred.iterations() > config.kdf_max_iterations:
+                raise VCCSAuthenticationError("Bad NDNv1 iterations count: {}".format(
+                        self.cred.iterations()))
+            # 16 bytes minimum (pwhash is hex encoded, so 32)
+            if len(self.cred.derived_key()) < 32:
+                raise VCCSAuthenticationError("Bad NDNv1 derived_key length: {}".format(
+                        len(self.cred.derived_key())))
+        elif action == 'add_creds':
+            if config.add_creds_password_version != 'NDNv1':
+                raise VCCSAuthenticationError("Add password credentials of version {!r} not implemented".format(
+                        config.add_creds_password_version))
+            if not config.add_creds_password_key_handle:
+                raise VCCSAuthenticationError("Add password credentials key_handle not set".format(
+                        config.add_creds_password_version))
+            cred_data = {'type':          'password',
+                         'status':        'active',
+                         'version':       'NDNv1',
+                         'kdf':           'PBKDF2-HMAC-SHA512',
+                         'derived_key':   None,  # will be calculated later, in add_credential()
+                         'key_handle':    config.add_creds_password_key_handle,
+                         'iterations':    config.add_creds_password_kdf_iterations,
+                         'salt':          None,  # will be added later, in add_credential()
+                         'credential_id': req['credential_id'],
+                         }
+            self.cred = vccs_auth_credential.from_dict(cred_data, None)
+        else:
+            raise VCCSAuthenticationError("Unknown action {!r}".format(action))
 
     def authenticate(self, hasher, kdf, logger):
         """
@@ -89,10 +115,43 @@ class VCCSPasswordFactor():
         return (H2 == credential_stored_hash)
 
         See the VCCS/README file for a longer reasoning about this scheme.
-        """
 
+        :returns: True on successful authentication, False otherwise
+        """
+        H2 = self._calculate_cred_hash(hasher, kdf)
+        self._audit_log(logger, H2, self.cred)
+        return (H2.encode('hex') == self.cred.derived_key())
+
+    def add_credential(self, hasher, kdf, logger):
+        """
+        Add a credential to the credential store.
+
+        This works very much like authenticate(), but obviously adds an entry to the
+        credential store instead of compare a candidate hash with the hash of an already
+        existing entry in the credential store.
+
+        :returns: True on success
+        """
+        self.cred.salt(hasher.safe_random(self.config.add_creds_password_salt_bytes).encode('hex'))
+        H2 = self._calculate_cred_hash(hasher, kdf)
+        self.cred.derived_key(H2)
+        res = self.credstore.add_credential(self.cred)
+        logger.audit("Added credential credential_id={!r}, H2[16]={!r}, res={!r}".format(
+                self.cred.id(), H2[:8].encode('hex'), res))
+        return True
+
+    def _calculate_cred_hash(self, hasher, kdf):
+        """
+        Calculate the expected password hash value for a credential, along this
+        pseudo code :
+
+        T1 = 'A' | user_id | credential_id | H1
+        T2 = PBKDF2-HMAC-SHA512(T1, iterations=many, salt)
+        local_salt = yhsm_hmac_sha1(T2)
+        H2 = PBKDF2-HMAC-SHA512(T2, iterations=1, local_salt)
+        """
         # Lock down key usage & credential to auth
-        T1 = '|'.join(['A', self.user_id(), self.cred.id(), self.H1()])
+        T1 = '|'.join(['A', self._user_id, str(self.cred.id()), self._H1])
 
         # This is the really time consuming PBKDF2 step.
         T2 = kdf.pbkdf2_hmac_sha512(T1, self.cred.iterations(), self.cred.salt_as_bytes())
@@ -109,10 +168,7 @@ class VCCSPasswordFactor():
 
         # PBKDF2 again with iter=1 to mix in the local_salt into the final H2.
         H2 = kdf.pbkdf2_hmac_sha512(T2, 1, local_salt)
-
-        self._audit_log(logger, H2, self.cred)
-
-        return (H2.encode('hex') == self.cred.derived_key())
+        return H2
 
     def _audit_log(self, logger, H2, cred):
         """
@@ -130,16 +186,11 @@ class VCCSPasswordFactor():
                           "H2[16]={h2!r}, stored[16]={stored!r}").format( \
                     cid = cred.id(), h2 = H2_hex[:16], stored = cred.derived_key()[:16]))
 
-    def H1(self):
-        """
-        Return the H1 parameter, which is computed on the authentication frontend
-        and sent to backend as part of authentication request.
-        """
-        return self._H1
+def from_factor(req, action, user_id, credstore, config):
+    """
+    Part of parsing authentication/add_credentials requests received.
 
-    def user_id(self):
-        """
-        The user id, fetched from userdb on authentication frontend and
-        sent to backend as part of authentication request.
-        """
-        return self._user_id
+    Figure out what kind of object should be initialized, and return it.
+    """
+    if action == 'auth' or action == 'add_creds':
+        return VCCSPasswordFactor(action, req, user_id, credstore, config)

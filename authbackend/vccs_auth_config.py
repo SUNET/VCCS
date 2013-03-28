@@ -40,17 +40,19 @@ from vccs_auth_common import VCCSAuthenticationError
 
 _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'yhsm_device': '/dev/ttyACM0',
-                    'num_threads': 8,
+                    'num_threads': '8',
                     'nettle_path': '',
                     'mongodb_uri': '127.0.0.1',
                     'add_creds_allow': '', # comma-separated list of IP addresses
-                    'listen_port': 8550,
-                    'kdf_min_iterations': 20000,
-                    'kdf_max_iterations': 500000,
+                    'listen_port': '8550',
+                    'kdf_min_iterations': '20000',
+                    'kdf_max_iterations': '500000',
                     'add_creds_password_version': 'NDNv1',
                     'add_creds_password_key_handle': None,
-                    'add_creds_password_kdf_iterations': 50000,
-                    'add_creds_password_salt_bytes': 128 / 8,
+                    'add_creds_password_kdf_iterations': '50000',
+                    'add_creds_password_salt_bytes': str(128 / 8),
+                    'add_creds_oath_version': 'NDNv1',
+                    'add_creds_oath_key_handle': None,
                     }
 
 _CONFIG_SECTION = 'vccs_authbackend'
@@ -65,7 +67,7 @@ class VCCSAuthConfig():
             raise VCCSAuthenticationError("Failed loading config file {!r}".format(filename))
         # split on comma and strip. cache result.
         self._parsed_add_creds_allow = \
-            [x.strip() for x in ','.split(self.config.get(self.section, 'add_creds_allow'))]
+            [x.strip() for x in self.config.get(self.section, 'add_creds_allow').split(',')]
 
     @property
     def yhsm_device(self):
@@ -112,7 +114,7 @@ class VCCSAuthConfig():
 
     @property
     def add_creds_password_key_handle(self):
-        res = self.config.get(self.section, 'add_creds_password_key_handle')
+        res = self.config.getint(self.section, 'add_creds_password_key_handle')
         if not res:
             raise VCCSAuthenticationError("Add password credentials key_handle not set")
         return res
@@ -124,3 +126,15 @@ class VCCSAuthConfig():
     @property
     def add_creds_password_salt_bytes(self):
         return self.config.getint(self.section, 'add_creds_password_salt_bytes')
+
+    @property
+    def add_creds_oath_version(self):
+        return self.config.get(self.section, 'add_creds_oath_version')
+
+    @property
+    def add_creds_oath_key_handle(self):
+        res = self.config.getint(self.section, 'add_creds_oath_key_handle')
+        if not res:
+            raise VCCSAuthenticationError("Add oath credentials key_handle not set")
+        return res
+

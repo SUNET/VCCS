@@ -118,10 +118,17 @@ class AuthRequest():
     }
     """
 
-    def __init__(self, json, credstore):
+    def __init__(self, json, credstore, config, top_node):
+        """
+        :params top_node: String, either 'auth' or 'add_creds'
+        """
         #print "\n\nDecoding JSON : '%s'\n\n" % (json)
-        body = simplejson.loads(json)
-        req = body['auth']
+        try:
+            body = simplejson.loads(json)
+        except Exception, ex:
+            cherrypy.log.error("Failed parsing JSON body :\n{!r}\n-----\n".format(json), traceback=True)
+            raise VCCSAuthenticationError("Failed parsing request")
+        req = body[top_node]
         for req_field in ['version', 'user_id', 'factors']:
             if req_field not in req:
                 raise VCCSAuthenticationError("No {!r} in request".format(req_field))
@@ -132,15 +139,18 @@ class AuthRequest():
 
         self._factors = []
         for factor in req['factors']:
+            this = None
             if factor['type'] == 'password':
-                self._factors.append(vccs_auth_password.VCCSPasswordFactor(factor, self._user_id, credstore))
-            elif factor['type'] == 'oath-hotp' :
-                self._factors.append(vccs_auth_oath.OATHHOTPFactor(factor, credstore))
-            elif factor['type'] == 'oath-totp' :
-                self._factors.append(vccs_auth_oath.OATHTOTPFactor(factor, credstore))
+                this = vccs_auth_password.from_factor(factor, top_node, self._user_id, credstore, config)
+            elif factor['type'] == 'oath-hotp' or factor['type'] == 'oath-totp':
+                this = vccs_auth_oath.from_factor(factor, top_node, credstore, config)
+
+            if this:
+                self._factors.append(this)
             else:
-                # eventually fail on unknown type, but continue processing to consume any OTPs
-                self._factors.append(FailFactor('Unknown authentication factor type : {!r}'.format(factor['type'])))
+                # eventually fail on unknown type (or action), but continue processing to consume any OTPs
+                self._factors.append(FailFactor('Unknown authentication factor type {!r} or action {!r}'.format(
+                            factor['type'], top_node)))
 
     def factors(self):
         return self._factors
@@ -183,38 +193,28 @@ class VCCSLogger():
 
 class AuthBackend(object):
 
-    def __init__(self, hasher, kdf, logger, credstore):
+    def __init__(self, hasher, kdf, logger, credstore, config):
+        """
+        :params hasher: VCCSHasher() instance
+        :params kdf: NDNKDF() instance
+        :params logger: VCCSLogger() instance for audit logging
+        :params credstore: VCCSAuthCredentialStore() instance
+        :params config: VCCSAuthConfig() instance
+        """
         self.hasher = hasher
         self.kdf = kdf
         self.logger = logger
         self.credstore = credstore
+        self.config = config
 
     @cherrypy.expose
     def authenticate(self, request=None):
         result = False
-        try:
-            auth = AuthRequest(request, self.credstore)
 
-            log_context = {'client': cherrypy.request.remote.ip,
-                           'user_id': auth.user_id(),
-                           }
-            self.logger.set_context(log_context)
-
-            # Go through the list of authentication factors in the request
-            fail = 0
-            for factor in auth.factors():
-                if not factor.authenticate(self.hasher, self.kdf, self.logger):
-                    fail += 1
-            result = (fail == 0)
-        except VCCSAuthenticationError, autherr:
-            cherrypy.log.error("FAILED processing request from {ip!r}: {reason!r}".format( \
-                    ip = cherrypy.request.remote.ip, reason = autherr.reason))
-            cherrypy.response.status = 500
-            # Don't disclose anything about our internal issues
+        auth, result, = self._evaluate(request, 'auth')
+        if not auth:
+            # Don't disclose anything on our internal failures
             return None
-
-        if not auth.factors():
-            result = False
 
         self.logger.audit("factors={factors}, auth_result={res}".format( \
                 factors = [x.type for x in auth.factors()], res = result))
@@ -224,6 +224,75 @@ class AuthBackend(object):
                                       }
                     }
         return "{}\n".format(simplejson.dumps(response))
+
+    @cherrypy.expose
+    def add_creds(self, request=None):
+        result = False
+        if not cherrypy.request.remote.ip in self.config.add_creds_allow:
+            cherrypy.log.error("Denied add_creds request from {} not in add_creds_allow ({})".format(
+                    cherrypy.request.remote.ip, self.config.add_creds_allow))
+            cherrypy.response.status = 403
+            return None
+
+        auth, result, = self._evaluate(request, 'add_creds')
+        if not auth:
+            # Don't disclose anything on our internal failures
+            return None
+
+        self.logger.audit("factors={factors}, result={res}".format( \
+                factors = [x.type for x in auth.factors()], res = result))
+
+        response = {'add_creds_response': {'version': 1,
+                                           'success': result,
+                                           }
+                    }
+        return "{}\n".format(simplejson.dumps(response))
+
+    def _evaluate(self, request, action):
+        """
+        Go through all the factors in the request and perform the requested action
+        (either authentication or add_credential).
+
+        :returns: True if all went well, False otherwise
+        """
+        try:
+            auth = AuthRequest(request, self.credstore, self.config, top_node=action)
+
+            log_context = {'client': cherrypy.request.remote.ip,
+                           'user_id': auth.user_id(),
+                           'req': action,
+                           }
+            self.logger.set_context(log_context)
+
+            # Go through the list of authentication factors in the request
+            fail = 0
+            for factor in auth.factors():
+                if action == 'add_creds':
+                    if not factor.add_credential(self.hasher, self.kdf, self.logger):
+                        fail += 1
+                elif action == 'auth':
+                    if not factor.authenticate(self.hasher, self.kdf, self.logger):
+                        fail += 1
+                else:
+                    raise VCCSAuthenticationError("Unknown action {!r}".format(action))
+            result = (fail == 0)
+        except VCCSAuthenticationError, autherr:
+            cherrypy.log.error("FAILED processing request from {ip!r}: {reason!r}".format( \
+                    ip = cherrypy.request.remote.ip, reason = autherr.reason))
+            cherrypy.response.status = 500
+            # Don't disclose anything about our internal issues
+            return None, False
+        except Exception, ex:
+            cherrypy.log.error("FAILED handling request from {ip!r}: {reason!r}\n".format( \
+                    ip = cherrypy.request.remote.ip, reason = ex), traceback=True)
+            cherrypy.response.status = 500
+            # Don't disclose anything about our internal issues
+            return None, False
+
+        if not auth.factors():
+            result = False
+
+        return auth, result,
 
 
 def main():
@@ -243,7 +312,7 @@ def main():
     cherrypy.config.update( {'server.thread_pool': config.num_threads,
                              'server.socket_port': config.listen_port,
                              } )
-    cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore))
+    cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
 
 if __name__ == '__main__':
     newname = os.path.basename(sys.argv[0])
