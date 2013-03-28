@@ -11,16 +11,19 @@ like this :
     {
       "auth": {
         "version": 1,
-        "user_id": "something-uniquely-identifying-user",
+        "user_id": "persistent-user-identifier",
          "factors": [
             {
-              "H1": "$2a$08$Ahy51oCM6Vg6d.1ScOPxse<snip bcrypt hash>7wVP9EBy",
+              "H1": "H1": "227ALNnVn0y1IuhmbsjmlsCHDLIJ5xq",
               "credential_id": "4711",
               "type": "password"
             }
           ]
        }
     }
+
+(H1 is a bcrypt hash, without the salt, of the plaintext password - computed
+in the VCCS frontend application)
 
 The response would look like this :
 

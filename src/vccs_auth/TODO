@@ -1,7 +1,5 @@
 TODO for vccs_authbackend :
 
-  * implement separate command for credential (re-)initialization
-
   * allow protected transport - TLS? or offload that using nginx front end?
     currently, an SSL offloader is part of the spec.
 
@@ -11,12 +9,9 @@ TODO for vccs_authbackend :
   * somehow sign the response so that an audit log from another part of VCCS
     can prove if an authentication request was in fact sent to a backend or not
 
-  * OATH HOTP successful response need to return the counter value used, to update
-    the counter in the credential database
-
   * audit log to something else than syslog?
 
   * generate signatures of authentication events, using YubiHSM AEADs?
 
-  * backends need a revocation list for all credentials that should not be used
-    anymore, to prevent an attacker re-inserting old credentials into the user db
+  * backends need a revocation API. Revocation support is already in credential
+    store, but a way to invoke it is currently missing.
