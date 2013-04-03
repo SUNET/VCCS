@@ -36,6 +36,8 @@
 import os
 import ConfigParser
 
+import pyhsm.util
+
 from vccs_auth_common import VCCSAuthenticationError
 
 _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
@@ -114,10 +116,10 @@ class VCCSAuthConfig():
 
     @property
     def add_creds_password_key_handle(self):
-        res = self.config.getint(self.section, 'add_creds_password_key_handle')
+        res = self.config.get(self.section, 'add_creds_password_key_handle')
         if not res:
-            raise VCCSAuthenticationError("Add password credentials key_handle not set")
-        return res
+            raise VCCSAuthenticationError("add_creds_password_key_handle not set")
+        return pyhsm.util.key_handle_to_int(res)
 
     @property
     def add_creds_password_kdf_iterations(self):
@@ -133,8 +135,8 @@ class VCCSAuthConfig():
 
     @property
     def add_creds_oath_key_handle(self):
-        res = self.config.getint(self.section, 'add_creds_oath_key_handle')
+        res = self.config.get(self.section, 'add_creds_oath_key_handle')
         if not res:
-            raise VCCSAuthenticationError("Add oath credentials key_handle not set")
-        return res
+            raise VCCSAuthenticationError("add_creds_oath_key_handle not set")
+        return pyhsm.util.key_handle_to_int(res)
 
