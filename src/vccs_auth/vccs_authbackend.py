@@ -232,11 +232,19 @@ class AuthBackend(object):
             cherrypy.log.error("Denied add_creds request from {} not in add_creds_allow ({})".format(
                     cherrypy.request.remote.ip, self.config.add_creds_allow))
             cherrypy.response.status = 403
+            # Don't disclose anything about our internal issues
             return None
 
         auth, result, = self._evaluate(request, 'add_creds')
         if not auth:
             # Don't disclose anything on our internal failures
+            return None
+
+        if len(auth.factors() > 1):
+            cherrypy.log.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
+                    auth.factors()))
+            cherrypy.response.status = 501
+            # Don't disclose anything about our internal issues
             return None
 
         self.logger.audit("factors={factors}, result={res}".format( \
