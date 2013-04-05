@@ -14,7 +14,7 @@ like this :
         "user_id": "persistent-user-identifier",
          "factors": [
             {
-              "H1": "H1": "227ALNnVn0y1IuhmbsjmlsCHDLIJ5xq",
+              "H1": "227ALNnVn0y1IuhmbsjmlsCHDLIJ5xq",
               "credential_id": "4711",
               "type": "password"
             }
