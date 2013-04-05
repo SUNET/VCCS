@@ -118,7 +118,7 @@ class AuthRequest():
     }
     """
 
-    def __init__(self, json, credstore, config, top_node):
+    def __init__(self, json, credstore, config, top_node, logger):
         """
         :params top_node: String, either 'auth' or 'add_creds'
         """
@@ -126,7 +126,7 @@ class AuthRequest():
         try:
             body = simplejson.loads(json)
         except Exception, ex:
-            cherrypy.log.error("Failed parsing JSON body :\n{!r}\n-----\n".format(json), traceback=True)
+            logger.error("Failed parsing JSON body :\n{!r}\n-----\n".format(json), traceback=True)
             raise VCCSAuthenticationError("Failed parsing request")
         req = body[top_node]
         for req_field in ['version', 'user_id', 'factors']:
@@ -185,9 +185,24 @@ class VCCSLogger():
         self.logger.addHandler(syslog_h)
 
     def audit(self, data):
+        """
+        Audit log data.
+        :params data: Audit data as string
+        """
         self.logger.info("AUDIT: {context}, {data}".format(context = self.context, data = data))
 
+    def error(self, msg, traceback=False):
+        """
+        Log an error message, additionally appending a traceback.
+        :params msg: Error message as string
+        :params traceback: Append a traceback or not, True or False
+        """
+        self.logger.error(msg, exc_info=traceback)
+
     def set_context(self, context):
+        """
+        Set data to be included in all future audit logs.
+        """
         self.context = ', '.join([k + '=' + v for (k, v) in context.items()])
 
 
@@ -229,7 +244,7 @@ class AuthBackend(object):
     def add_creds(self, request=None):
         result = False
         if not cherrypy.request.remote.ip in self.config.add_creds_allow:
-            cherrypy.log.error("Denied add_creds request from {} not in add_creds_allow ({})".format(
+            self.logger.error("Denied add_creds request from {} not in add_creds_allow ({})".format(
                     cherrypy.request.remote.ip, self.config.add_creds_allow))
             cherrypy.response.status = 403
             # Don't disclose anything about our internal issues
@@ -241,7 +256,7 @@ class AuthBackend(object):
             return None
 
         if len(auth.factors() > 1):
-            cherrypy.log.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
+            self.logger.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
                     auth.factors()))
             cherrypy.response.status = 501
             # Don't disclose anything about our internal issues
@@ -264,7 +279,7 @@ class AuthBackend(object):
         :returns: True if all went well, False otherwise
         """
         try:
-            auth = AuthRequest(request, self.credstore, self.config, top_node=action)
+            auth = AuthRequest(request, self.credstore, self.config, action, logger)
 
             log_context = {'client': cherrypy.request.remote.ip,
                            'user_id': auth.user_id(),
@@ -285,13 +300,13 @@ class AuthBackend(object):
                     raise VCCSAuthenticationError("Unknown action {!r}".format(action))
             result = (fail == 0)
         except VCCSAuthenticationError, autherr:
-            cherrypy.log.error("FAILED processing request from {ip!r}: {reason!r}".format( \
+            self.logger.error("FAILED processing request from {ip!r}: {reason!r}".format( \
                     ip = cherrypy.request.remote.ip, reason = autherr.reason))
             cherrypy.response.status = 500
             # Don't disclose anything about our internal issues
             return None, False
         except Exception, ex:
-            cherrypy.log.error("FAILED handling request from {ip!r}: {reason!r}\n".format( \
+            self.logger.error("FAILED handling request from {ip!r}: {reason!r}\n".format( \
                     ip = cherrypy.request.remote.ip, reason = ex), traceback=True)
             cherrypy.response.status = 500
             # Don't disclose anything about our internal issues
@@ -315,10 +330,10 @@ def main(newname=None):
 
     # initialize various components
     config = vccs_auth_config.VCCSAuthConfig(args.config_file, args.debug)
+    logger = VCCSLogger()
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth_hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
-    logger = VCCSLogger()
     credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None)
 
     cherrypy.config.update( {'server.thread_pool': config.num_threads,
