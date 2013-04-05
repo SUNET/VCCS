@@ -303,10 +303,14 @@ class AuthBackend(object):
         return auth, result,
 
 
-def main():
+def main(newname=None):
     """
     Initialize everything and start the authentication backend.
     """
+    global myname
+    if newname:
+        myname = newname
+
     args = parse_args()
 
     # initialize various components
@@ -324,12 +328,8 @@ def main():
 
 if __name__ == '__main__':
     newname = os.path.basename(sys.argv[0])
-    if newname:
-        global myname
-        myname = newname
-
     try:
-        if main():
+        if main(newname):
             sys.exit(0)
         sys.exit(1)
     except KeyboardInterrupt:
