@@ -47,7 +47,10 @@ from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB as VCCS_MongoDB
 class TestCredStore(unittest.TestCase):
 
     def setUp(self):
-        self.mdb = VCCS_MongoDB(host='127.0.0.1', port=27017, collection="TEST_vccs_auth_credstore_TEST")
+        try:
+            self.mdb = VCCS_MongoDB(host='127.0.0.1', port=27017, collection="TEST_vccs_auth_credstore_TEST")
+        except:
+            raise unittest.SkipTest("requires accessible MongoDB server on 127.0.0.1")
         self.cred_data = {'type':          'password',
                           'kdf':           'PBKDF2-HMAC-SHA512',
                           'status':        'active',
