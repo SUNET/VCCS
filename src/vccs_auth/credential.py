@@ -37,7 +37,7 @@
 Authentication credential data objects.
 """
 
-from vccs_auth_common import VCCSAuthenticationError
+from vccs_auth.common import VCCSAuthenticationError
 
 _VALID_STATUS_VALUES = ['active', 'revoked']
 

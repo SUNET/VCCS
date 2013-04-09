@@ -39,8 +39,8 @@ Store VCCSAuthCredential objects in database.
 
 import pymongo
 
-import vccs_auth_credential
-from vccs_auth_credential import VCCSAuthCredential
+import vccs_auth.credential
+from vccs_auth.credential import VCCSAuthCredential
 
 class VCCSAuthCredentialStore():
 
@@ -90,7 +90,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
      }
     """
 
-    def __init__(self, host, port, collection="vccs_auth_credstore", **kwargs):
+    def __init__(self, host, port, collection="credstore", **kwargs):
         VCCSAuthCredentialStore.__init__(self)
         self.connection = pymongo.MongoClient(host, port, **kwargs)
         self.db = self.connection[collection]
@@ -117,7 +117,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         metadata = {'id': res['_id'],
                     'revision': res['revision'],
                     }
-        cred = vccs_auth_credential.from_dict(res['credential'],
+        cred = vccs_auth.credential.from_dict(res['credential'],
                                               metadata,
                                               check_revoked=check_revoked,
                                               )

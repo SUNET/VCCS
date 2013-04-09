@@ -38,8 +38,8 @@ import struct
 
 import pyhsm.oath_hotp
 
-import vccs_auth_credential
-from vccs_auth_common import VCCSAuthenticationError
+import vccs_auth.credential
+from vccs_auth.common import VCCSAuthenticationError
 
 _OATH_TOTP_TIME_DIVIDER = 30
 
@@ -84,7 +84,7 @@ class OATHCommon():
                          'credential_id': req['credential_id'],
                          'oath_counter':  req['oath_counter'],
                          }
-            self.cred = vccs_auth_credential.from_dict(cred_data, None)
+            self.cred = vccs_auth.credential.from_dict(cred_data, None)
         else:
             raise VCCSAuthenticationError("Unknown action {!r}".format(action))
 

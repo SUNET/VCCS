@@ -41,9 +41,8 @@ import pymongo
 import unittest
 from pprint import pprint, pformat
 
-import vccs_auth_credential
-import vccs_auth_credstore
-from vccs_auth_credstore import VCCSAuthCredentialStoreMongoDB as VCCS_MongoDB
+import vccs_auth
+from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB as VCCS_MongoDB
 
 class TestCredStore(unittest.TestCase):
 
@@ -57,6 +56,7 @@ class TestCredStore(unittest.TestCase):
                           'key_handle':    0x2000,
                           'iterations':    100,
                           'credential_id': 4711,
+                          'salt':          '12345678901234567890123456789012',
                           }
 
     def test_mdb_aaa_empty_collection(self):
@@ -70,7 +70,7 @@ class TestCredStore(unittest.TestCase):
         """
         Test adding a credential to MongoDB credential store.
         """
-        cred = vccs_auth_credential.from_dict(self.cred_data, None)
+        cred = vccs_auth.credential.from_dict(self.cred_data, None)
         id_ = self.mdb.add_credential(cred)
         print("Added credential -> id : {!r}".format(id_))
 
@@ -86,7 +86,7 @@ class TestCredStore(unittest.TestCase):
         this_id = 9797
         data = self.cred_data
         data['credential_id'] = this_id
-        cred = vccs_auth_credential.from_dict(data, None)
+        cred = vccs_auth.credential.from_dict(data, None)
         self.mdb.add_credential(cred)
         with self.assertRaises(pymongo.errors.DuplicateKeyError):
             self.mdb.add_credential(cred)
@@ -105,7 +105,7 @@ class TestCredStore(unittest.TestCase):
         this_id = 9898
         data = self.cred_data
         data['credential_id'] = this_id
-        cred = vccs_auth_credential.from_dict(data, None)
+        cred = vccs_auth.credential.from_dict(data, None)
         self.mdb.add_credential(cred)
 
         # assert no exception
@@ -117,7 +117,7 @@ class TestCredStore(unittest.TestCase):
         self.mdb.update_credential(cred2)
 
         # assert exception when fetching revoked credential
-        with self.assertRaises(vccs_auth_credential.VCCSAuthCredentialError):
+        with self.assertRaises(vccs_auth.credential.VCCSAuthCredentialError):
             self.mdb.get_credential(this_id)
 
         # assert exception when trying to activate credential again
@@ -128,7 +128,7 @@ class TestCredStore(unittest.TestCase):
         """
         Test the __repr__ method of a credential.
         """
-        cred = vccs_auth_credential.from_dict(self.cred_data, None)
+        cred = vccs_auth.credential.from_dict(self.cred_data, None)
         res = repr(cred)
         print "Credential : {!r}".format(res)
         self.assertTrue(hex(self.cred_data['key_handle']) in res)

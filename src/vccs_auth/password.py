@@ -33,9 +33,8 @@
 # Author : Fredrik Thulin <fredrik@thulin.net>
 #
 
-import vccs_auth_credential
-
-from vccs_auth_common import VCCSAuthenticationError
+import vccs_auth.credential
+from vccs_auth.common import VCCSAuthenticationError
 
 class VCCSPasswordFactor():
     """
@@ -95,7 +94,7 @@ class VCCSPasswordFactor():
                          'salt':          None,  # will be added later, in add_credential()
                          'credential_id': req['credential_id'],
                          }
-            self.cred = vccs_auth_credential.from_dict(cred_data, None)
+            self.cred = vccs_auth.credential.from_dict(cred_data, None)
         else:
             raise VCCSAuthenticationError("Unknown action {!r}".format(action))
 

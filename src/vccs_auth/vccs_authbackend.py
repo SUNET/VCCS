@@ -53,15 +53,10 @@ import cherrypy
 import simplejson
 
 import ndnkdf
-import vccs_auth_oath
-import vccs_auth_common
-import vccs_auth_config
-import vccs_auth_hasher
-import vccs_auth_password
-import vccs_auth_credstore
+import vccs_auth
 
-from vccs_auth_common import VCCSAuthenticationError
-from vccs_auth_credstore import VCCSAuthCredentialStoreMongoDB
+from vccs_auth.common import VCCSAuthenticationError
+from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB
 
 default_config_file = "/etc/vccs/vccs_authbackend.ini"
 default_debug = False
@@ -141,9 +136,9 @@ class AuthRequest():
         for factor in req['factors']:
             this = None
             if factor['type'] == 'password':
-                this = vccs_auth_password.from_factor(factor, top_node, self._user_id, credstore, config)
+                this = vccs_auth.password.from_factor(factor, top_node, self._user_id, credstore, config)
             elif factor['type'] == 'oath-hotp' or factor['type'] == 'oath-totp':
-                this = vccs_auth_oath.from_factor(factor, top_node, credstore, config)
+                this = vccs_auth.oath.from_factor(factor, top_node, credstore, config)
 
             if this:
                 self._factors.append(this)
@@ -329,11 +324,11 @@ def main(newname=None):
     args = parse_args()
 
     # initialize various components
-    config = vccs_auth_config.VCCSAuthConfig(args.config_file, args.debug)
+    config = vccs_auth.config.VCCSAuthConfig(args.config_file, args.debug)
     logger = VCCSLogger()
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
-    hasher = vccs_auth_hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
+    hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
     credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None)
 
     cherrypy.config.update( {'server.thread_pool': config.num_threads,

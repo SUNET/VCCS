@@ -49,11 +49,19 @@ __organization__ = 'NORDUnet'
 __license__ = 'BSD'
 __authors__ = ['Fredrik Thulin']
 
-__all__ = ['vccs_auth_common',
-           'vccs_auth_config',
-           'vccs_auth_credential',
-           'vccs_auth_credstore',
-           'vccs_auth_hasher',
-           'vccs_auth_oath',
-           'vccs_auth_password',
+__all__ = ['common',
+           'config',
+           'credential',
+           'credstore',
+           'hasher',
+           'oath',
+           'password',
     ]
+
+import vccs_auth.common
+import vccs_auth.config
+import vccs_auth.credential
+import vccs_auth.credstore
+import vccs_auth.hasher
+import vccs_auth.oath
+import vccs_auth.password

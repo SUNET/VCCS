@@ -38,7 +38,7 @@ import ConfigParser
 
 import pyhsm.util
 
-from vccs_auth_common import VCCSAuthenticationError
+from vccs_auth.common import VCCSAuthenticationError
 
 _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'yhsm_device': '/dev/ttyACM0',
