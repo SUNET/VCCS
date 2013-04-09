@@ -274,7 +274,7 @@ class AuthBackend(object):
         :returns: True if all went well, False otherwise
         """
         try:
-            auth = AuthRequest(request, self.credstore, self.config, action, logger)
+            auth = AuthRequest(request, self.credstore, self.config, action, self.logger)
 
             log_context = {'client': cherrypy.request.remote.ip,
                            'user_id': auth.user_id(),
