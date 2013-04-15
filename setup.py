@@ -19,9 +19,9 @@ install_requires = [
     'pymongo >= 2.4.2',
 ]
 
-setup(name='VCCS',
+setup(name='vccs_auth',
       version=version,
-      description="Very Complicated Credential System",
+      description="Very Complicated Credential System - authentication backend",
       long_description=README,
       classifiers=[
         # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
@@ -30,10 +30,10 @@ setup(name='VCCS',
       author='Fredrik Thulin',
       author_email='fredrik@thulin.net',
       license='BSD',
-      packages=find_packages('src'),
+      packages=['vccs_auth',],
       package_dir = {'': 'src'},
-      include_package_data=True,
-      package_data = { },
+      #include_package_data=True,
+      #package_data = { },
       zip_safe=False,
       install_requires=install_requires,
       entry_points={
