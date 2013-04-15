@@ -16,7 +16,6 @@ install_requires = [
     'cherrypy >= 3.2.0',
     'simplejson >= 2.6.2',
     'pyserial >= 2.6',
-    'pycrypto >= 2.6',
     'pymongo >= 2.4.2',
 ]
 
