@@ -95,7 +95,12 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         self.connection = pymongo.MongoClient(host, port, **kwargs)
         self.db = self.connection[collection]
         self.credentials = self.db.credentials
-        self.credentials.ensure_index('credential.credential_id', name='credential_id_idx', unique=True)
+        try:
+            self.credentials.ensure_index('credential.credential_id', name='credential_id_idx', unique=True)
+        except pymongo.errors.AutoReconnect:
+            # Ensuring index doesn't need to happen every time, but it would of course be nice
+            # to know it happened in reasonable time. XXX we should at least log this failure.
+            pass
 
     def get_credential(self, credential_id, check_revoked=True):
         """
