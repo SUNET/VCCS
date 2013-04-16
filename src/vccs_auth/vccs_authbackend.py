@@ -337,6 +337,8 @@ def main(newname=None):
     if config.logdir:
         cherry_conf['log.access_file'] = os.path.join(config.logdir, 'access.log')
         cherry_conf['log.error_file'] = os.path.join(config.logdir, 'error.log')
+    else:
+        sys.stderr.write("NOTE: Config option 'logdir' not set.\n")
     cherrypy.config.update(cherry_conf)
 
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
