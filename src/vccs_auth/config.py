@@ -44,6 +44,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'yhsm_device': '/dev/ttyACM0',
                     'num_threads': '8',
                     'nettle_path': '',
+                    'logdir': None,
                     'mongodb_uri': '127.0.0.1',
                     'add_creds_allow': '', # comma-separated list of IP addresses
                     'listen_port': '8550',
@@ -82,6 +83,13 @@ class VCCSAuthConfig():
     @property
     def nettle_path(self):
         res = self.config.get(self.section, 'nettle_path')
+        if not res:
+            res = None
+        return res
+
+    @property
+    def logdir(self):
+        res = self.config.get(self.section, 'logdir')
         if not res:
             res = None
         return res

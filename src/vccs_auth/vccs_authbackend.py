@@ -331,9 +331,14 @@ def main(newname=None):
     hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
     credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None)
 
-    cherrypy.config.update( {'server.thread_pool': config.num_threads,
-                             'server.socket_port': config.listen_port,
-                             } )
+    cherry_conf = {'server.thread_pool': config.num_threads,
+                   'server.socket_port': config.listen_port,
+                   }
+    if config.logdir:
+        cherry_conf['log.access_file'] = os.path.join(config.logdir, 'access.log')
+        cherry_conf['log.error_file'] = os.path.join(config.logdir, 'error.log')
+    cherrypy.config.update(cherry_conf)
+
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
 
 if __name__ == '__main__':
