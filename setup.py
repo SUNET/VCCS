@@ -37,7 +37,7 @@ setup(name='vccs_auth',
       zip_safe=False,
       install_requires=install_requires,
       entry_points={
-        'console_scripts': ['vccs_authbackend=vccs_auth.vccs_auth.vccs_authbackend:main',
+        'console_scripts': ['vccs_authbackend=vccs_auth.vccs_authbackend:main',
                             ]
         }
       )
