@@ -250,7 +250,7 @@ class AuthBackend(object):
             # Don't disclose anything on our internal failures
             return None
 
-        if len(auth.factors() > 1):
+        if len(auth.factors()) > 1:
             self.logger.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
                     auth.factors()))
             cherrypy.response.status = 501
@@ -340,6 +340,9 @@ def main(newname=None):
     else:
         sys.stderr.write("NOTE: Config option 'logdir' not set.\n")
     cherrypy.config.update(cherry_conf)
+
+    cherrypy.tools.proxy.remote = 'X-Forwarded-For'
+    sys.stderr.write("FREDRIK: REMOTE IS {!r}\n".format(cherrypy.tools.proxy.remote))
 
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
 
