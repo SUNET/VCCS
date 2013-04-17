@@ -193,6 +193,8 @@ class VCCSLogger():
         :params traceback: Append a traceback or not, True or False
         """
         self.logger.error(msg, exc_info=traceback)
+        # get error messages into the cherrypy error log as well
+        cherrypy.log.error(msg)
 
     def set_context(self, context):
         """
@@ -333,6 +335,9 @@ def main(newname=None):
 
     cherry_conf = {'server.thread_pool': config.num_threads,
                    'server.socket_port': config.listen_port,
+                   # enables X-Forwarded-For, since BCP is to run this server
+                   # behind a webserver that handles SSL
+                   'tools.proxy.on': True,
                    }
     if config.logdir:
         cherry_conf['log.access_file'] = os.path.join(config.logdir, 'access.log')
@@ -340,9 +345,6 @@ def main(newname=None):
     else:
         sys.stderr.write("NOTE: Config option 'logdir' not set.\n")
     cherrypy.config.update(cherry_conf)
-
-    cherrypy.tools.proxy.remote = 'X-Forwarded-For'
-    sys.stderr.write("FREDRIK: REMOTE IS {!r}\n".format(cherrypy.tools.proxy.remote))
 
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
 
