@@ -252,13 +252,6 @@ class AuthBackend(object):
             # Don't disclose anything on our internal failures
             return None
 
-        if len(auth.factors()) > 1:
-            self.logger.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
-                    auth.factors()))
-            cherrypy.response.status = 501
-            # Don't disclose anything about our internal issues
-            return None
-
         self.logger.audit("factors={factors}, result={res}".format( \
                 factors = [x.type for x in auth.factors()], res = result))
 
@@ -273,7 +266,7 @@ class AuthBackend(object):
         Go through all the factors in the request and perform the requested action
         (either authentication or add_credential).
 
-        :returns: True if all went well, False otherwise
+        :returns: AuthRequest(), result (True if all went well, False otherwise)
         """
         try:
             auth = AuthRequest(request, self.credstore, self.config, action, self.logger)
@@ -284,17 +277,25 @@ class AuthBackend(object):
                            }
             self.logger.set_context(log_context)
 
+            if action == 'add_creds':
+                if len(auth.factors()) > 1:
+                    self.logger.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
+                            auth.factors()))
+                    cherrypy.response.status = 501
+                    # Don't disclose anything about our internal issues
+                    return auth, False
+
             # Go through the list of authentication factors in the request
             fail = 0
             for factor in auth.factors():
                 if action == 'add_creds':
-                    if not factor.add_credential(self.hasher, self.kdf, self.logger):
-                        fail += 1
+                    res = factor.add_credential(self.hasher, self.kdf, self.logger):
                 elif action == 'auth':
-                    if not factor.authenticate(self.hasher, self.kdf, self.logger):
-                        fail += 1
+                    res = factor.authenticate(self.hasher, self.kdf, self.logger):
                 else:
                     raise VCCSAuthenticationError("Unknown action {!r}".format(action))
+                if not res:
+                    fail += 1
             result = (fail == 0)
         except VCCSAuthenticationError, autherr:
             self.logger.error("FAILED processing request from {ip!r}: {reason!r}".format( \
