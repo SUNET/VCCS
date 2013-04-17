@@ -129,15 +129,19 @@ class VCCSPasswordFactor():
         credential store instead of compare a candidate hash with the hash of an already
         existing entry in the credential store.
 
-        :returns: True on success
+        :returns: True on success, False otherwise
         """
         self.cred.salt(hasher.safe_random(self.config.add_creds_password_salt_bytes).encode('hex'))
         H2 = self._calculate_cred_hash(hasher, kdf)
         self.cred.derived_key(H2)
-        res = self.credstore.add_credential(self.cred)
-        logger.audit("Added credential credential_id={!r}, H2[16]={!r}, res={!r}".format(
-                self.cred.id(), H2[:8].encode('hex'), res))
-        return True
+        try:
+            res = self.credstore.add_credential(self.cred)
+            logger.audit("Added credential credential_id={!r}, H2[16]={!r}, res={!r}".format(
+                    self.cred.id(), H2[:8].encode('hex'), res))
+            return True
+        except pymongo.errors.DuplicateKeyError, e:
+            logger.error("FAILED adding credential: {!r}".format(e))
+        return False
 
     def _calculate_cred_hash(self, hasher, kdf):
         """
