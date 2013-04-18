@@ -289,9 +289,9 @@ class AuthBackend(object):
             fail = 0
             for factor in auth.factors():
                 if action == 'add_creds':
-                    res = factor.add_credential(self.hasher, self.kdf, self.logger):
+                    res = factor.add_credential(self.hasher, self.kdf, self.logger)
                 elif action == 'auth':
-                    res = factor.authenticate(self.hasher, self.kdf, self.logger):
+                    res = factor.authenticate(self.hasher, self.kdf, self.logger)
                 else:
                     raise VCCSAuthenticationError("Unknown action {!r}".format(action))
                 if not res:
