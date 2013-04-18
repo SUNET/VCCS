@@ -54,7 +54,8 @@ class OATHCommon():
     code with previous ones to make sure it hasn't been used in a previous
     request, or a simultaneous request to another frontend server.
     """
-    def __init__(self, action, req, credstore, config):
+    def __init__(self, oath_type, action, req, credstore, config):
+        self.type = oath_type
         self.credstore = credstore
         config = config
         if action == 'auth':
@@ -88,7 +89,7 @@ class OATHCommon():
         else:
             raise VCCSAuthenticationError("Unknown action {!r}".format(action))
 
-    def add_credential(self, hasher, kdf, logger):
+    def add_credential(self, hasher, _kdf, logger):
         """
         Add a credential to the credential store.
 
@@ -197,8 +198,7 @@ class OATHHOTPFactor(OATHCommon):
     attacker is sure to guess the right code in a rather short timeframe.
     """
     def __init__(self, action, req, credstore, config):
-        self.type = 'oath-hotp'
-        OATHCommon.__init__(self, action, req, credstore, config)
+        OATHCommon.__init__(self, 'oath-hotp', action, req, credstore, config)
 
     def authenticate(self, hasher, _kdf, logger):
         # Compare the user supplied code with expected, expected + 1, ... expected + 3
@@ -218,8 +218,7 @@ class OATHTOTPFactor(OATHCommon):
     the code - meaning we accept the current expected code, and the last one.
     """
     def __init__(self, action, req, credstore, config):
-        self.type = 'oath-totp'
-        OATHCommon.__init__(self, action, req, credstore, config)
+        OATHCommon.__init__(self, 'oath-totp', action, req, credstore, config)
 
     def authenticate(self, hasher, _kdf, logger):
         # Compare the user supplied code with current time, and current time - 30

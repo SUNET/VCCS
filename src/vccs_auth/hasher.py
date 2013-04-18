@@ -42,7 +42,12 @@ class VCCSHasher():
     def __init__(self):
         pass
 
-    pass
+    def safe_hmac_sha1(self, key_handle, data):
+        raise NotImplementedError('Subclass should implement safe_hmac_sha1')
+
+    def safe_random(self, byte_count):
+        raise NotImplementedError('Subclass should implement safe_random')
+
 
 class VCCSYHSMHasher(VCCSHasher):
 
@@ -85,20 +90,25 @@ class VCCSYHSMHasher(VCCSHasher):
         self.lock_acquire()
         try:
             from_hsm = self.yhsm.random(byte_count)
-            xored = ''.join([chr(ord(a) ^ ord(b)) for (a,b) in zip(from_hsm, from_os)])
+            xored = ''.join([chr(ord(a) ^ ord(b)) for (a, b) in zip(from_hsm, from_os)])
             return xored
         finally:
             self.lock_release()
+
 
 class NoOpLock():
     """
     A No-op lock class, to avoid a lot of "if self.lock:" in code using locks.
     """
+    def __init__(self):
+        pass
+
     def acquire(self):
         pass
 
     def release(self):
         pass
+
 
 def hasher_from_string(name, lock = None, debug = False):
     """
