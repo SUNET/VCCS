@@ -140,7 +140,10 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         docu = {'revision': 1,
                 'credential': cred.to_dict(),
                 }
-        return self.credentials.insert(docu)
+        try:
+            return self.credentials.insert(docu)
+        except pymongo.errors.DuplicateKeyError, e:
+            return False
 
     def update_credential(self, cred, safe=True):
         """

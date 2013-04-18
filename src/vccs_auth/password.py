@@ -134,14 +134,10 @@ class VCCSPasswordFactor():
         self.cred.salt(hasher.safe_random(self.config.add_creds_password_salt_bytes).encode('hex'))
         H2 = self._calculate_cred_hash(hasher, kdf)
         self.cred.derived_key(H2)
-        try:
-            res = self.credstore.add_credential(self.cred)
-            logger.audit("Added credential credential_id={!r}, H2[16]={!r}, res={!r}".format(
-                    self.cred.id(), H2[:8].encode('hex'), res))
-            return True
-        except pymongo.errors.DuplicateKeyError, e:
-            logger.error("FAILED adding credential: {!r}".format(e))
-        return False
+        res = self.credstore.add_credential(self.cred)
+        logger.audit("Add credential credential_id={!r}, H2[16]={!r}, res={!r}".format(
+                self.cred.id(), H2[:8].encode('hex'), res))
+        return res == True
 
     def _calculate_cred_hash(self, hasher, kdf):
         """
