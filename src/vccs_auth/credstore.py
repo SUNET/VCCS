@@ -90,7 +90,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
      }
     """
 
-    def __init__(self, host, port, collection="credstore", **kwargs):
+    def __init__(self, host, port, collection="vccs_auth_credstore", **kwargs):
         VCCSAuthCredentialStore.__init__(self)
         self.connection = pymongo.MongoClient(host, port, **kwargs)
         self.db = self.connection[collection]
