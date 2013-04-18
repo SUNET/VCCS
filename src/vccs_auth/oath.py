@@ -150,16 +150,16 @@ class OATHCommon():
                 except Exception, e:
                     raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
 
-                    this_code = pyhsm.oath_hotp.truncate(hmac_result, length=self.cred.digits())
-                    #print "OATH: counter=%i, user_code=%i, this_code=%i" % (start_counter + offset, code, this_code)
-                    if this_code == self._user_code:
-                        # Make sure this OTP has in fact not been used before
-                        if self._increase_oath_counter(start_counter, offset, logger):
-                            logger.audit("result=OK, factor={name}, counter={ctr!r}, offset={offs!r}".format( \
-                                    name = self.type, ctr = start_counter, offs = offset))
-                            return True
-                        else:
-                            return False
+                this_code = pyhsm.oath_hotp.truncate(hmac_result, length=self.cred.digits())
+                #print "OATH: counter=%i, user_code=%i, this_code=%i" % (start_counter + offset, code, this_code)
+                if this_code == self._user_code:
+                    # Make sure this OTP has in fact not been used before
+                    if self._increase_oath_counter(start_counter, offset, logger):
+                        logger.audit("result=OK, factor={name}, counter={ctr!r}, offset={offs!r}".format( \
+                                name = self.type, ctr = start_counter, offs = offset))
+                        return True
+                    else:
+                        return False
         finally:
             hasher.lock_release()
         logger.audit("result=FAIL, factor={name}, counter={ctr!r}, offsets={offsets!r}".format( \
