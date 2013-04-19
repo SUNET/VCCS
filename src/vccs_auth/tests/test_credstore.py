@@ -101,8 +101,9 @@ class TestCredStore(unittest.TestCase):
         data['credential_id'] = this_id
         cred = vccs_auth.credential.from_dict(data, None)
         self.mdb.add_credential(cred)
-        with self.assertRaises(pymongo.errors.DuplicateKeyError):
-            self.mdb.add_credential(cred)
+        cred.derived_key(new='bb' * (512 / 8))
+        print cred.to_dict()
+        self.assertFalse(self.mdb.add_credential(cred))
 
     def test_mdb_get_unknown_credential(self):
         """
