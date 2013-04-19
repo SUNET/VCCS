@@ -161,9 +161,12 @@ class FailFactor():
         self.type = 'fail'
         self.reason = reason
 
-    def authenticate(self, hasher, kdf, logger):
+    def authenticate(self, _hasher, _kdf, logger):
         logger.audit("result=FAIL, factor=fail, reason={}".format(self.reason))
         return False
+
+    def add_credential(self, _hasher, _kdf, _logger):
+        raise VCCSAuthenticationError("Impossible to add_credential with FailFactor")
 
 class VCCSLogger():
     def __init__(self, context = '', debug = False):
@@ -332,7 +335,7 @@ def main(newname=None):
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
-    credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None)
+    credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None, logger)
 
     cherry_conf = {'server.thread_pool': config.num_threads,
                    'server.socket_port': config.listen_port,

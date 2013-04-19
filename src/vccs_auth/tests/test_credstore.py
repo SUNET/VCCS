@@ -44,11 +44,21 @@ from pprint import pprint, pformat
 import vccs_auth
 from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB as VCCS_MongoDB
 
+class FakeLogger():
+
+    def audit(self, data):
+        sys.stderr.write("AUDIT: {!r}\n".format(data))
+
+    def error(self, data):
+        sys.stderr.write("ERROR: {!r}\n".format(data))
+
+
 class TestCredStore(unittest.TestCase):
 
     def setUp(self):
+        self.logger = FakeLogger()
         try:
-            self.mdb = VCCS_MongoDB(host='127.0.0.1', port=27017, collection="TEST_vccs_auth_credstore_TEST")
+            self.mdb = VCCS_MongoDB('127.0.0.1', 27017, self.logger, collection="TEST_vccs_auth_credstore_TEST")
         except:
             raise unittest.SkipTest("requires accessible MongoDB server on 127.0.0.1")
         self.cred_data = {'type':          'password',
