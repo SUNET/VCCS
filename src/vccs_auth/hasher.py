@@ -83,6 +83,8 @@ class VCCSYHSMHasher(VCCSHasher):
             self.lock_release()
 
     def hmac_sha1(self, key_handle, data):
+        if key_handle is None:
+            key_handle = pyhsm.defines.YSM_TEMP_KEY_HANDLE
         return self.yhsm.hmac_sha1(key_handle, data).get_hash()
 
     def load_temp_key(self, nonce, key_handle, aead):
@@ -127,12 +129,14 @@ class VCCSSoftHasher(VCCSHasher):
             self.lock_release()
 
     def hmac_sha1(self, key_handle, data):
+        if key_handle is None:
+            key_handle = 'TEMP_KEY'
         hmac_key = self.keys[key_handle]
         return hmac.new(hmac_key, msg=data, digestmod=sha1).digest()
 
     def load_temp_key(self, nonce, key_handle, aead):
         pt = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce, aead, decrypt = True)
-        self.keys[pyhsm.defines.YSM_TEMP_KEY_HANDLE] = pt[:-4]  # skip the last four bytes which are permission bits
+        self.keys['TEMP_KEY'] = pt[:-4]  # skip the last four bytes which are permission bits
         return True
 
     def safe_random(self, byte_count):

@@ -146,12 +146,13 @@ class OATHCommon():
                 counter = struct.pack("> Q", start_counter + offset)
 
                 try:
-                    hmac_result = hasher.hmac_sha1(pyhsm.defines.YSM_TEMP_KEY_HANDLE, counter).get_hash()
+                    # key_handle None says to use the temp key loaded above
+                    hmac_result = hasher.hmac_sha1(None, counter)
                 except Exception, e:
-                    raise VCCSAuthenticationError("Hashing operation failed : {!s}".format(e))
+                    raise VCCSAuthenticationError("Hashing operation failed : {!r}".format(e))
 
                 this_code = pyhsm.oath_hotp.truncate(hmac_result, length=self.cred.digits())
-                #print "OATH: counter=%i, user_code=%i, this_code=%i" % (start_counter + offset, code, this_code)
+                #print "OATH: counter=%i, user_code=%i, this_code=%i" % (start_counter + offset, self._user_code, this_code)
                 if this_code == self._user_code:
                     # Make sure this OTP has in fact not been used before
                     if self._increase_oath_counter(start_counter, offset, logger):
