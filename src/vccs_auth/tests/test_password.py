@@ -46,9 +46,6 @@ from pprint import pprint, pformat
 import ndnkdf
 import vccs_auth
 
-import hmac as HMAC
-from hashlib import sha1 as SHA1
-
 class FakeCredentialStore():
 
     def get_credential(self, cred_id):
