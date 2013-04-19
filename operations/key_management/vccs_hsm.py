@@ -396,6 +396,7 @@ class HsmConfigurator():
             res = raw_input("Commit changes to keystore? Enter 'yes' or 'no' : ")
             if res == "no":
                 self.logger.info("Keys NOT committed to permanent storage in HSM.")
+                # XXX should maybe 'keydecrypt' here to revert any added keys?
                 return False
             elif res == "yes":
                 break
