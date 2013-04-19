@@ -70,21 +70,11 @@ class FakeCredentialStore():
             raise ValueError('Test have no credential with id {!r}'.format(cred_id))
         return vccs_auth.credential.from_dict(data, metadata)
 
-class FakeHasher():
-
-    def safe_hmac_sha1(self, key_handle, data):
-        if key_handle == 0x2000:
-            hmac_key = str('2000' * 16).decode('hex')
-        else:
-            raise ValueError('Test have no HMAC key for key_handle {!r}'.format(key_handle))
-        sys.stderr.write("HMAC KEY: {!r}\n".format(hmac_key.encode('hex')))
-        sys.stderr.write("HMAC DATA: {!r}\n".format(data.encode('hex')))
-        return HMAC.new(key=hmac_key, msg=data, digestmod=SHA1).digest()
 
 class FakeLogger():
 
     def audit(self, data):
-        sys.stderr.write("AUDIT: {!r}".format(data))
+        sys.stdout.write("AUDIT: {!r}\n".format(data))
 
 class TestPasswordHashing(unittest.TestCase):
 
@@ -95,7 +85,9 @@ class TestPasswordHashing(unittest.TestCase):
         self.config = vccs_auth.config.VCCSAuthConfig(self.config_file, debug)
         self.credstore = FakeCredentialStore()
         self.kdf = ndnkdf.NDNKDF(self.config.nettle_path)
-        self.hasher = FakeHasher()
+        self.keys = {0x2000: str('2000' * 16).decode('hex'),
+                     }
+        self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
         self.logger = FakeLogger()
 
     def test_password_hash_1(self):

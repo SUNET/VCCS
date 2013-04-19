@@ -37,24 +37,38 @@ import os
 import stat
 import pyhsm
 
+import hmac
+from hashlib import sha1
+
 class VCCSHasher():
 
-    def __init__(self):
-        pass
+    def __init__(self, lock):
+        self.lock = lock
 
-    def safe_hmac_sha1(self, key_handle, data):
+    def safe_hmac_sha1(self, _key_handle, _data):
         raise NotImplementedError('Subclass should implement safe_hmac_sha1')
 
-    def safe_random(self, byte_count):
+    def hmac_sha1(self, _key_handle, _data):
+        raise NotImplementedError('Subclass should implement hmac_sha1')
+
+    def load_temp_key(self, _nonce, _key_handle, _aead):
+        raise NotImplementedError('Subclass should implement load_temp_key')
+
+    def safe_random(self, _byte_count):
         raise NotImplementedError('Subclass should implement safe_random')
+
+    def lock_acquire(self):
+        return self.lock.acquire()
+
+    def lock_release(self):
+        return self.lock.release()
 
 
 class VCCSYHSMHasher(VCCSHasher):
 
-    def __init__(self, device, lock, debug):
-        VCCSHasher.__init__(self)
+    def __init__(self, device, lock, debug=False):
+        VCCSHasher.__init__(self, lock)
         self.yhsm = pyhsm.base.YHSM(device, debug)
-        self.lock = lock
 
     def safe_hmac_sha1(self, key_handle, data):
         """
@@ -74,12 +88,6 @@ class VCCSYHSMHasher(VCCSHasher):
     def load_temp_key(self, nonce, key_handle, aead):
         return self.yhsm.load_temp_key(nonce, key_handle, aead)
 
-    def lock_acquire(self):
-        return self.lock.acquire()
-
-    def lock_release(self):
-        return self.lock.release()
-
     def safe_random(self, byte_count):
         """
         Generate random bytes using both YubiHSM random function and host OS.
@@ -94,6 +102,44 @@ class VCCSYHSMHasher(VCCSHasher):
             return xored
         finally:
             self.lock_release()
+
+class VCCSSoftHasher(VCCSHasher):
+
+    """
+    Hasher implementation without any real extra security benefits
+    (except perhaps separating HMAC keys from credential store).
+    """
+
+    def __init__(self, keys, lock, debug=False):
+        VCCSHasher.__init__(self, lock)
+        self.keys = keys
+
+    def safe_hmac_sha1(self, key_handle, data):
+        """
+        Perform HMAC-SHA-1 operation using YubiHSM.
+
+        Acquires a lock first if a lock instance was given at creation time.
+        """
+        self.lock_acquire()
+        try:
+            return self.hmac_sha1(key_handle, data)
+        finally:
+            self.lock_release()
+
+    def hmac_sha1(self, key_handle, data):
+        hmac_key = self.keys[key_handle]
+        return hmac.new(hmac_key, msg=data, digestmod=sha1).digest()
+
+    def load_temp_key(self, nonce, key_handle, aead):
+        pt = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce, aead, decrypt = True)
+        self.keys[pyhsm.defines.YSM_TEMP_KEY_HANDLE] = pt[:-4]  # skip the last four bytes which are permission bits
+        return True
+
+    def safe_random(self, byte_count):
+        """
+        Generate random bytes from urandom.
+        """
+        return os.urandom(byte_count)
 
 
 class NoOpLock():
