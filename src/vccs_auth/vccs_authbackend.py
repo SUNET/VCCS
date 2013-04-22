@@ -44,6 +44,7 @@ See the README file for a more in-depth description.
 
 import os
 import sys
+import time
 import logging
 import logging.handlers
 import argparse
@@ -85,7 +86,38 @@ def parse_args():
 
     return parser.parse_args()
 
-class AuthRequest():
+
+class BaseRequest():
+    """
+    Base authentication/revocation request.
+    """
+    def __init__(self, json, top_node, logger):
+        try:
+            body = simplejson.loads(json)
+        except Exception:
+            logger.error("Failed parsing JSON body :\n{!r}\n-----\n".format(json), traceback=True)
+            raise VCCSAuthenticationError("Failed parsing request")
+        req = body[top_node]
+
+        for req_field in ['version', 'user_id', 'factors']:
+            if req_field not in req:
+                raise VCCSAuthenticationError("No {!r} in request".format(req_field))
+        if int(req['version']) is not 1:
+            raise VCCSAuthenticationError("Unknown request version : {!r}".format(req['version']))
+
+        self._user_id = req['user_id']
+        self._parsed_req = req
+        # make pylint happy
+        self._factors = []
+
+    def factors(self):
+        return self._factors
+
+    def user_id(self):
+        return self._user_id
+
+
+class AuthRequest(BaseRequest):
 
     """
     Parse JSON body into auth request object.
@@ -116,23 +148,10 @@ class AuthRequest():
         """
         :params top_node: String, either 'auth' or 'add_creds'
         """
-        #print "\n\nDecoding JSON : '%s'\n\n" % (json)
-        try:
-            body = simplejson.loads(json)
-        except Exception, ex:
-            logger.error("Failed parsing JSON body :\n{!r}\n-----\n".format(json), traceback=True)
-            raise VCCSAuthenticationError("Failed parsing request")
-        req = body[top_node]
-        for req_field in ['version', 'user_id', 'factors']:
-            if req_field not in req:
-                raise VCCSAuthenticationError("No {!r} in request".format(req_field))
-        if int(req['version']) is not 1:
-            raise VCCSAuthenticationError("Unknown request version : {!r}".format(req['version']))
-
-        self._user_id = req['user_id']
+        BaseRequest.__init__(self, json, top_node, logger)
 
         self._factors = []
-        for factor in req['factors']:
+        for factor in self._parsed_req['factors']:
             this = None
             if factor['type'] == 'password':
                 this = vccs_auth.password.from_factor(factor, top_node, self._user_id, credstore, config)
@@ -146,11 +165,44 @@ class AuthRequest():
                 self._factors.append(FailFactor('Unknown authentication factor type {!r} or action {!r}'.format(
                             factor['type'], top_node)))
 
-    def factors(self):
-        return self._factors
 
-    def user_id(self):
-        return self._user_id
+class RevokeRequest(BaseRequest):
+
+    """
+    Parse JSON body into revoke request object.
+
+    Example (request) body :
+
+    {
+        "revoke": {
+            "version": 1,
+            "user_id": "something-uniquely-identifying-user",
+            "credentials": [
+                {
+                    "credential_id": "4711",
+                    "reason": "Revoked upon user request",
+                    "reference: "timestamp=1366627173, client_ip=192.0.2.111"
+                }
+            ]
+        }
+    }
+    """
+
+    def __init__(self, json, logger):
+        #print "\n\nDecoding JSON : '%s'\n\n" % (json)
+        BaseRequest.__init__(self, json, 'revoke', logger)
+
+        self._factors = []
+        # credentials called factors to match AuthRequest
+        for factor in self._parsed_req['factors']:
+            for req_field in ['credential_id', 'reason', 'reference']:
+                if req_field not in factor:
+                    raise VCCSAuthenticationError("No {!r} in credential to revoke".format(req_field))
+            for str_field in ['reason', 'reference']:
+                if not isinstance(factor[str_field], basestring):
+                    raise VCCSAuthenticationError("Invalid {!r} (not string)" % (str_field))
+            self._factors.append(factor)
+
 
 class FailFactor():
     """
@@ -263,6 +315,31 @@ class AuthBackend(object):
                     }
         return "{}\n".format(simplejson.dumps(response))
 
+    @cherrypy.expose
+    def revoke_creds(self, request=None):
+        result = False
+        if not cherrypy.request.remote.ip in self.config.revoke_creds_allow:
+            self.logger.error("Denied revoke_creds request from {} not in revoke_creds_allow ({})".format(
+                    cherrypy.request.remote.ip, self.config.revoke_creds_allow))
+            cherrypy.response.status = 403
+            # Don't disclose anything about our internal issues
+            return None
+
+        revoke, result, = self._evaluate(request, 'revoke_creds')
+        if not revoke:
+            # Don't disclose anything on our internal failures
+            return None
+
+        self.logger.audit("credentials={credentials}, result={res}".format( \
+                credentials = [x.type for x in revoke.factors()], res = result))
+
+        response = {'revoke_creds_response': {'version': 1,
+                                              'success': result,
+                                              }
+                    }
+        return "{}\n".format(simplejson.dumps(response))
+
+
     def _evaluate(self, request, action):
         """
         Go through all the factors in the request and perform the requested action
@@ -271,29 +348,34 @@ class AuthBackend(object):
         :returns: AuthRequest(), result (True if all went well, False otherwise)
         """
         try:
-            auth = AuthRequest(request, self.credstore, self.config, action, self.logger)
+            if action == 'revoke_creds':
+                parsed = RevokeRequest(request, self.logger)
+            else:
+                parsed = AuthRequest(request, self.credstore, self.config, action, self.logger)
 
             log_context = {'client': cherrypy.request.remote.ip,
-                           'user_id': auth.user_id(),
+                           'user_id': parsed.user_id(),
                            'req': action,
                            }
             self.logger.set_context(log_context)
 
-            if action == 'add_creds':
-                if len(auth.factors()) > 1:
-                    self.logger.error("REJECTING add_creds request with > 1 factor : {!r}".format( \
-                            auth.factors()))
+            if action == 'add_creds' or action == 'revoke_creds':
+                if len(parsed.factors()) > 1:
+                    self.logger.error("REJECTING {!r} request with > 1 factor : {!r}".format( \
+                            action, parsed.factors()))
                     cherrypy.response.status = 501
                     # Don't disclose anything about our internal issues
-                    return auth, False
+                    return parsed, False
 
-            # Go through the list of authentication factors in the request
+            # Go through the list of authentication/revocation factors in the request
             fail = 0
-            for factor in auth.factors():
+            for factor in parsed.factors():
                 if action == 'add_creds':
                     res = factor.add_credential(self.hasher, self.kdf, self.logger)
                 elif action == 'auth':
                     res = factor.authenticate(self.hasher, self.kdf, self.logger)
+                elif action == 'revoke_creds':
+                    res = revoke_credential(parsed, self.credstore)
                 else:
                     raise VCCSAuthenticationError("Unknown action {!r}".format(action))
                 if not res:
@@ -312,10 +394,31 @@ class AuthBackend(object):
             # Don't disclose anything about our internal issues
             return None, False
 
-        if not auth.factors():
+        if not parsed.factors():
             result = False
 
-        return auth, result,
+        return parsed, result,
+
+
+def revoke_credential(parsed, credstore):
+    """
+    Revoke a credential in the credential store.
+
+    Construct revocation info with current time, IP of client requesting revocation and
+    some self-stated reason for revocation, together with an opaque reference from the client.
+
+    Both the reason and reference must be strings (verified to be in RevokeRequest.__init__()).
+    """
+    cred = credstore.get_credential(parsed['credential_id'])
+    if not cred:
+        raise VCCSAuthenticationError("Unknown credential: {!r}".format(parsed['credential_id']))
+    info = {'timestamp': int(time.time()),
+            'client_ip': cherrypy.request.remote.ip,
+            'reason': parsed['reason'],
+            'reference': parsed['reference'],
+            }
+    cred.revoke(info)
+    return True
 
 
 def main(myname = 'vccs_authbackend'):
@@ -354,4 +457,4 @@ if __name__ == '__main__':
             sys.exit(0)
         sys.exit(1)
     except KeyboardInterrupt:
-        pass
+        sys.exit(0)
