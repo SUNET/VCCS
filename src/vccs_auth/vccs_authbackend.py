@@ -61,7 +61,6 @@ from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB
 default_config_file = "/etc/vccs/vccs_authbackend.ini"
 default_debug = False
 
-myname = 'vccs_backend'
 
 def parse_args():
     """
@@ -169,7 +168,7 @@ class FailFactor():
         raise VCCSAuthenticationError("Impossible to add_credential with FailFactor")
 
 class VCCSLogger():
-    def __init__(self, context = '', debug = False):
+    def __init__(self, myname, context = '', debug = False):
         self.context = context
 
         self.logger = logging.getLogger(myname)
@@ -319,19 +318,15 @@ class AuthBackend(object):
         return auth, result,
 
 
-def main(newname=None):
+def main(myname = 'vccs_authbackend'):
     """
     Initialize everything and start the authentication backend.
     """
-    global myname
-    if newname:
-        myname = newname
-
     args = parse_args()
 
     # initialize various components
     config = vccs_auth.config.VCCSAuthConfig(args.config_file, args.debug)
-    logger = VCCSLogger()
+    logger = VCCSLogger(myname)
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
@@ -353,9 +348,9 @@ def main(newname=None):
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
 
 if __name__ == '__main__':
-    newname = os.path.basename(sys.argv[0])
     try:
-        if main(newname):
+        progname = os.path.basename(sys.argv[0])
+        if main(progname):
             sys.exit(0)
         sys.exit(1)
     except KeyboardInterrupt:
