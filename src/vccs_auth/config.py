@@ -47,6 +47,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'logdir': None,
                     'mongodb_uri': '127.0.0.1',
                     'add_creds_allow': '', # comma-separated list of IP addresses
+                    'revoke_creds_allow': '', # comma-separated list of IP addresses
                     'listen_port': '8550',
                     'kdf_min_iterations': '20000',
                     'kdf_max_iterations': '500000',
@@ -71,6 +72,8 @@ class VCCSAuthConfig():
         # split on comma and strip. cache result.
         self._parsed_add_creds_allow = \
             [x.strip() for x in self.config.get(self.section, 'add_creds_allow').split(',')]
+        self._parsed_revoke_creds_allow = \
+            [x.strip() for x in self.config.get(self.section, 'revoke_creds_allow').split(',')]
 
     @property
     def yhsm_device(self):
@@ -101,6 +104,10 @@ class VCCSAuthConfig():
     @property
     def add_creds_allow(self):
         return self._parsed_add_creds_allow
+
+    @property
+    def revoke_creds_allow(self):
+        return self._parsed_revoke_creds_allow
 
     @property
     def debug(self):
