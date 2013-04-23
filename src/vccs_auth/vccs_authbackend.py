@@ -188,9 +188,9 @@ class RevokeRequest(BaseRequest):
     }
     """
 
-    def __init__(self, json, logger):
+    def __init__(self, json, top_node, logger):
         #print "\n\nDecoding JSON : '%s'\n\n" % (json)
-        BaseRequest.__init__(self, json, 'revoke', logger)
+        BaseRequest.__init__(self, json, top_node, logger)
 
         self._factors = []
         # credentials called factors to match AuthRequest
@@ -218,6 +218,7 @@ class FailFactor():
 
     def add_credential(self, _hasher, _kdf, _logger):
         raise VCCSAuthenticationError("Impossible to add_credential with FailFactor")
+
 
 class VCCSLogger():
     def __init__(self, myname, context = '', debug = False):
@@ -331,7 +332,7 @@ class AuthBackend(object):
             return None
 
         self.logger.audit("credentials={credentials}, result={res}".format( \
-                credentials = [x.type for x in revoke.factors()], res = result))
+                credentials = [x['credential_id'] for x in revoke.factors()], res = result))
 
         response = {'revoke_creds_response': {'version': 1,
                                               'success': result,
@@ -349,7 +350,7 @@ class AuthBackend(object):
         """
         try:
             if action == 'revoke_creds':
-                parsed = RevokeRequest(request, self.logger)
+                parsed = RevokeRequest(request, action, self.logger)
             else:
                 parsed = AuthRequest(request, self.credstore, self.config, action, self.logger)
 
@@ -375,7 +376,7 @@ class AuthBackend(object):
                 elif action == 'auth':
                     res = factor.authenticate(self.hasher, self.kdf, self.logger)
                 elif action == 'revoke_creds':
-                    res = revoke_credential(parsed, self.credstore)
+                    res = revoke_credential(factor, self.credstore)
                 else:
                     raise VCCSAuthenticationError("Unknown action {!r}".format(action))
                 if not res:
@@ -418,6 +419,7 @@ def revoke_credential(parsed, credstore):
             'reference': parsed['reference'],
             }
     cred.revoke(info)
+    credstore.update_credential(cred)
     return True
 
 
