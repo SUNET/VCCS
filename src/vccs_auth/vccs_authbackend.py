@@ -99,11 +99,13 @@ class BaseRequest():
             raise VCCSAuthenticationError("Failed parsing request")
         req = body[top_node]
 
+        if req.get('version', 1) is not 1:
+            # really handle missing version below
+            raise VCCSAuthenticationError("Unknown request version : {!r}".format(req['version']))
+
         for req_field in ['version', 'user_id', 'factors']:
             if req_field not in req:
                 raise VCCSAuthenticationError("No {!r} in request".format(req_field))
-        if int(req['version']) is not 1:
-            raise VCCSAuthenticationError("Unknown request version : {!r}".format(req['version']))
 
         self._user_id = req['user_id']
         self._parsed_req = req
