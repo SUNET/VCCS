@@ -92,6 +92,7 @@ class BaseRequest():
     Base authentication/revocation request.
     """
     def __init__(self, json, top_node, logger):
+        self.top_node = top_node
         try:
             body = simplejson.loads(json)
         except Exception:
@@ -111,6 +112,14 @@ class BaseRequest():
         self._parsed_req = req
         # make pylint happy
         self._factors = []
+
+    def __repr__(self):
+        return ('<{} @{:#x}: action={action!r},user_id={uid!r}'.format(
+            self.__class__.__name__,
+            id(self),
+            action=self.top_node,
+            uid=self.user_id(),
+            ))
 
     def factors(self):
         return self._factors
@@ -262,26 +271,43 @@ class VCCSLogger():
 
 class AuthBackend(object):
 
-    def __init__(self, hasher, kdf, logger, credstore, config):
+    def __init__(self, hasher, kdf, logger, credstore, config, expose_real_errors=False):
         """
         :params hasher: VCCSHasher() instance
         :params kdf: NDNKDF() instance
         :params logger: VCCSLogger() instance for audit logging
         :params credstore: VCCSAuthCredentialStore() instance
         :params config: VCCSAuthConfig() instance
+        :params expose_real_errors: boolean, mask errors or expose them (for devel/debug/test)
         """
         self.hasher = hasher
         self.kdf = kdf
         self.logger = logger
         self.credstore = credstore
         self.config = config
+        self.expose_real_errors = expose_real_errors
 
     @cherrypy.expose
     def authenticate(self, request=None):
+        self.remote_ip = cherrypy.request.remote.ip
         result = False
 
-        auth, result, = self._evaluate(request, 'auth')
-        if not auth:
+        # Parse request
+        top_node = 'auth'
+        parse_fun = lambda: AuthRequest(request, self.credstore, self.config, top_node, self.logger)
+        auth = self._safe_parse_request(parse_fun, 'auth', max_factors=10)
+        if not isinstance(auth, BaseRequest):
+            if type(auth) == int:
+                cherrypy.response.status = auth
+            # Don't disclose anything on our internal failures
+            return None
+
+        # Process parsed request
+        process_fun = lambda(factor): factor.authenticate(self.hasher, self.kdf, self.logger)
+        result = self._safe_process_factors(auth, process_fun)
+
+        if type(result) == int:
+            cherrypy.response.status = result
             # Don't disclose anything on our internal failures
             return None
 
@@ -296,16 +322,32 @@ class AuthBackend(object):
 
     @cherrypy.expose
     def add_creds(self, request=None):
+        self.remote_ip = cherrypy.request.remote.ip
         result = False
-        if not cherrypy.request.remote.ip in self.config.add_creds_allow:
+
+        if not self.remote_ip in self.config.add_creds_allow:
             self.logger.error("Denied add_creds request from {} not in add_creds_allow ({})".format(
-                    cherrypy.request.remote.ip, self.config.add_creds_allow))
+                    self.remote_ip, self.config.add_creds_allow))
             cherrypy.response.status = 403
             # Don't disclose anything about our internal issues
             return None
 
-        auth, result, = self._evaluate(request, 'add_creds')
-        if not auth:
+        # Parse request
+        top_node = 'add_creds'
+        parse_fun = lambda: AuthRequest(request, self.credstore, self.config, top_node, self.logger)
+        auth = self._safe_parse_request(parse_fun, 'add_creds')
+        if not isinstance(auth, BaseRequest):
+            if type(auth) == int:
+                cherrypy.response.status = auth
+            # Don't disclose anything on our internal failures
+            return None
+
+        # Process parsed request
+        process_fun = lambda(factor): factor.add_credential(self.hasher, self.kdf, self.logger)
+        result = self._safe_process_factors(auth, process_fun)
+
+        if type(result) == int:
+            cherrypy.response.status = result
             # Don't disclose anything on our internal failures
             return None
 
@@ -321,20 +363,34 @@ class AuthBackend(object):
     @cherrypy.expose
     def revoke_creds(self, request=None):
         result = False
-        if not cherrypy.request.remote.ip in self.config.revoke_creds_allow:
+        if not self.remote_ip in self.config.revoke_creds_allow:
             self.logger.error("Denied revoke_creds request from {} not in revoke_creds_allow ({})".format(
-                    cherrypy.request.remote.ip, self.config.revoke_creds_allow))
+                    self.remote_ip, self.config.revoke_creds_allow))
             cherrypy.response.status = 403
             # Don't disclose anything about our internal issues
             return None
 
-        revoke, result, = self._evaluate(request, 'revoke_creds')
-        if not revoke:
+        # Parse request
+        action = 'revoke_creds'
+        parse_fun = lambda: RevokeRequest(request, action, self.logger)
+        revoke = self._safe_parse_request(parse_fun, action)
+        if not isinstance(revoke, BaseRequest):
+            if type(revoke) == int:
+                cherrypy.response.status = revoke
             # Don't disclose anything on our internal failures
             return None
 
+        # Process parsed request
+        process_fun = lambda(factor): revoke_credential(factor, self.credstore, self.remote_ip)
+        result = self._safe_process_factors(revoke, process_fun)
+
         self.logger.audit("credentials={credentials}, result={res}".format( \
                 credentials = [x['credential_id'] for x in revoke.factors()], res = result))
+
+        if type(result) == int:
+            cherrypy.response.status = result
+            # Don't disclose anything on our internal failures
+            return None
 
         response = {'revoke_creds_response': {'version': 1,
                                               'success': result,
@@ -343,67 +399,79 @@ class AuthBackend(object):
         return "{}\n".format(simplejson.dumps(response))
 
 
-    def _evaluate(self, request, action):
+    def _safe_parse_request(self, parse_fun, action, min_factors=1, max_factors=1):
         """
-        Go through all the factors in the request and perform the requested action
-        (either authentication or add_credential).
+        Parse a received request.
 
-        :returns: AuthRequest(), result (True if all went well, False otherwise)
+        This function deliberately does not return any details on failures, but instead
+        just return HTTP error response codes -- this keeps stack traces from being
+        shown to the client.
+
+        :params parse_fun: callable resulting in a BaseRequest() subclass instance
+
+        :returns: BaseRequest() subclass instance or integer with HTTP response code
         """
         try:
-            if action == 'revoke_creds':
-                parsed = RevokeRequest(request, action, self.logger)
-            else:
-                parsed = AuthRequest(request, self.credstore, self.config, action, self.logger)
+            parsed = parse_fun()
 
-            log_context = {'client': cherrypy.request.remote.ip,
+            log_context = {'client': self.remote_ip,
                            'user_id': parsed.user_id(),
                            'req': action,
                            }
             self.logger.set_context(log_context)
 
-            if action == 'add_creds' or action == 'revoke_creds':
-                if len(parsed.factors()) > 1:
-                    self.logger.error("REJECTING {!r} request with > 1 factor : {!r}".format( \
-                            action, parsed.factors()))
-                    cherrypy.response.status = 501
-                    # Don't disclose anything about our internal issues
-                    return parsed, False
+            if len(parsed.factors()) > max_factors or len(parsed.factors()) < min_factors:
+                self.logger.error("REJECTING request {!r} with {!r} factor : {!r}".format( \
+                        parsed, len(parsed.factors()), parsed.factors()))
+                return 501
 
+            return parsed
+        except VCCSAuthenticationError, autherr:
+            self.logger.error("FAILED parsing request from {ip!r}: {reason!r}".format( \
+                    ip = self.remote_ip, reason = autherr.reason))
+            if self.expose_real_errors:
+                raise
+            return 500
+        except Exception, ex:
+            self.logger.error("FAILED handling request from {ip!r}: {reason!r}\n".format( \
+                    ip = self.remote_ip, reason = ex), traceback=True)
+            if self.expose_real_errors:
+                raise
+            return 500
+
+        return None
+
+    def _safe_process_factors(self, parsed, process_fun):
+        """
+        Go through all the factors in the request and perform the requested action
+        (either authentication, add_credential or revocation).
+
+        :returns: boolean (True if all went well, False otherwise) or integer HTTP response code
+        """
+        try:
             # Go through the list of authentication/revocation factors in the request
             fail = 0
             for factor in parsed.factors():
-                if action == 'add_creds':
-                    res = factor.add_credential(self.hasher, self.kdf, self.logger)
-                elif action == 'auth':
-                    res = factor.authenticate(self.hasher, self.kdf, self.logger)
-                elif action == 'revoke_creds':
-                    res = revoke_credential(factor, self.credstore)
-                else:
-                    raise VCCSAuthenticationError("Unknown action {!r}".format(action))
-                if not res:
+                if not process_fun(factor):
                     fail += 1
             result = (fail == 0)
+
+            return result
         except VCCSAuthenticationError, autherr:
             self.logger.error("FAILED processing request from {ip!r}: {reason!r}".format( \
-                    ip = cherrypy.request.remote.ip, reason = autherr.reason))
-            cherrypy.response.status = 500
-            # Don't disclose anything about our internal issues
-            return None, False
+                    ip = self.remote_ip, reason = autherr.reason))
+            if self.expose_real_errors:
+                raise
+            return 500
         except Exception, ex:
             self.logger.error("FAILED handling request from {ip!r}: {reason!r}\n".format( \
-                    ip = cherrypy.request.remote.ip, reason = ex), traceback=True)
-            cherrypy.response.status = 500
-            # Don't disclose anything about our internal issues
-            return None, False
-
-        if not parsed.factors():
-            result = False
-
-        return parsed, result,
+                    ip = self.remote_ip, reason = ex), traceback=True)
+            if self.expose_real_errors:
+                raise
+            return 500
 
 
-def revoke_credential(parsed, credstore):
+def revoke_credential(parsed, credstore, remote_ip):
     """
     Revoke a credential in the credential store.
 
@@ -416,7 +484,7 @@ def revoke_credential(parsed, credstore):
     if not cred:
         raise VCCSAuthenticationError("Unknown credential: {!r}".format(parsed['credential_id']))
     info = {'timestamp': int(time.time()),
-            'client_ip': cherrypy.request.remote.ip,
+            'client_ip': remote_ip,
             'reason': parsed['reason'],
             'reference': parsed['reference'],
             }
