@@ -362,6 +362,7 @@ class AuthBackend(object):
 
     @cherrypy.expose
     def revoke_creds(self, request=None):
+        self.remote_ip = cherrypy.request.remote.ip
         result = False
         if not self.remote_ip in self.config.revoke_creds_allow:
             self.logger.error("Denied revoke_creds request from {} not in revoke_creds_allow ({})".format(
@@ -421,7 +422,7 @@ class AuthBackend(object):
             self.logger.set_context(log_context)
 
             if len(parsed.factors()) > max_factors or len(parsed.factors()) < min_factors:
-                self.logger.error("REJECTING request {!r} with {!r} factor : {!r}".format( \
+                self.logger.error("REJECTING request {!r} with {!r} factors : {!r}".format( \
                         parsed, len(parsed.factors()), parsed.factors()))
                 return 501
 
