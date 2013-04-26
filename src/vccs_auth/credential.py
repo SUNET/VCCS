@@ -95,6 +95,23 @@ class VCCSAuthCredential():
             self._data['credential_id'] = new
         return val
 
+    def revocation_info(self, new=None):
+        """
+        Get or set status of credential. Either 'active' or 'revoked'.
+
+        :returns: string, value before any update
+        """
+        val = self._data.get('revocation_info')
+        if new is not None:
+            if val != None:
+                # Once revocation_info is set, it should not be modified. In VCCS, you
+                # add new credentials rather than resurrect old ones.
+                raise ValueError("Refusing to modify revocation_info of credential")
+            if type(new) is not dict:
+                raise ValueError("Invalid 'revocation_info' value: {!r}".format(new))
+            self._data['revocation_info'] = new
+        return val
+
     def metadata(self):
         """
         Return opaque data about this credential. This data is owned by
@@ -120,7 +137,7 @@ class VCCSAuthCredential():
             raise VCCSAuthCredentialError("Revocation of non-active credential")
         if not isinstance(info, dict):
             raise TypeError("Non-dict revocation 'info': {!r}".format(info))
-        self._data['revocation_info'] = info
+        self.revocation_info(info)
         self.status('revoked')
 
 class VCCSAuthPasswordCredential(VCCSAuthCredential):

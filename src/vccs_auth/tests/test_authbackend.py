@@ -39,6 +39,7 @@ Test the VCCS authbackend.
 
 import os
 import sys
+import time
 import bcrypt
 import unittest
 import pkg_resources
@@ -469,6 +470,18 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         revoked = self.credstore.get_credential(cred_id, check_revoked=False)
         print "REVOKED CRED {!r}".format(revoked)
         self.assertEqual(revoked.status(), 'revoked')
+        got_info = revoked.revocation_info()
+        print "REVOCATION INFO: {!r}".format(got_info)
+        expected_info = {'timestamp': got_info.get('timestamp'),  # copy since it is a timestamp
+                         'client_ip': '127.0.0.127',
+                         'reason': 'Just testing',
+                         'reference': '',
+                         }
+        self.assertEqual(revoked.revocation_info(), expected_info)
+        # check the timestamp
+        now = int(time.time())
+        self.assertGreater(got_info.get('timestamp'), now - 10)
+        self.assertLess(got_info.get('timestamp'), now + 1)
 
         with self.assertRaises(vccs_auth.credential.VCCSAuthCredentialError):
             # make sure an exception is raised for revoked credential without check_revoked=False
