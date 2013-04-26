@@ -45,15 +45,17 @@ cherrypy.config.update({'environment': "test_suite"})
 # subscribe it back.
 cherrypy.server.unsubscribe()
 
-# simulate fake socket address... they are irrelevant in our context
-local = cherrypy.lib.httputil.Host('127.0.0.1', 50000, "")
-remote = cherrypy.lib.httputil.Host('127.0.0.1', 50001, "")
-
 __all__ = ['BaseCherryPyTestCase']
+
+def _make_host(hostport):
+    # todo: add v6
+    host, port, = hostport.split(':')
+    return cherrypy.lib.httputil.Host(host, int(port), "")
 
 class BaseCherryPyTestCase(unittest.TestCase):
     def request(self, path='/', method='GET', app_path='', scheme='http',
-                proto='HTTP/1.1', data=None, headers=None, return_error=False, **kwargs):
+                proto='HTTP/1.1', data=None, headers=None, return_error=False,
+                local_hp='127.0.0.1:50000', remote_hp='127.0.0.1:50001', **kwargs):
         """
         CherryPy does not have a facility for serverless unit testing.
         However this recipe demonstrates a way of doing it by
@@ -117,6 +119,9 @@ class BaseCherryPyTestCase(unittest.TestCase):
         app.release_serving()
 
         # Let's fake the local and remote addresses
+        local = _make_host(local_hp)
+        remote = _make_host(remote_hp)
+
         request, response = app.get_serving(local, remote, scheme, proto)
         try:
             h = [(k, v) for k, v in h.iteritems()]
