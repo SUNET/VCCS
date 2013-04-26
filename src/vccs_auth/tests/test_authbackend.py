@@ -172,9 +172,26 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         response = self.request('/authenticate', request=j, return_error=True)
         self.assertEqual(response.output_status, '500 Internal Server Error')
 
+    def test_auth_missing_data(self):
+        """
+        Verify auth request with missing data is rejected
+        """
+        for req_field in ['version', 'user_id', 'factors']:
+            a = {'auth':
+                     {'version': 1,
+                      'user_id': 'ft@example.net',
+                      'factors': [],
+                      }
+                 }
+            del a['auth'][req_field]
+            j = json.dumps(a)
+            response = self.request('/authenticate', request=j, return_error=True)
+            self.assertIn("No '{!s}' in request".format(req_field), response.body[0])
+
+
     def test_auth_request1(self):
         """
-        Verify correct authenticate request
+        Verify correct authentication request
         """
         H1 = self._bcrypt_hash('plaintext')
         a = {'auth':
@@ -241,6 +258,50 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '501 Not Implemented')
         self.assertEqual(response.body, [])
+
+    def test_auth_request4(self):
+        """
+        Verify authenticate request with imaginary credential type
+        """
+        a = {'auth':
+                 {'version': 1,
+                  'user_id': 'ft@example.net',
+                  'factors': [{'type': 'promise'}]
+                  }
+             }
+        j = json.dumps(a)
+        response = self.request('/authenticate', request=j, return_error=True)
+        print "RESPONSE {!r}: {!r}".format(response.status, response.body)
+        self.assertEqual(response.output_status, '200 OK')
+        res = json.loads(response.body[0])
+        expected = {'auth_response':
+                        {'version': 1,
+                         'authenticated': False,
+                         }
+                    }
+        self.assertEqual(res, expected)
+
+    def test_auth_request5(self):
+        """
+        Verify correct authentication request but with unknown credential
+        """
+        H1 = self._bcrypt_hash('plaintext')
+        a = {'auth':
+                 {'version': 1,
+                  'user_id': 'ft@example.net',
+                  'factors': [
+                    {'type': 'password',
+                     'H1': H1,
+                     'credential_id': 9898,
+                     }
+                    ]
+                  }
+             }
+        j = json.dumps(a)
+        response = self.request('/authenticate', request=j, return_error=True)
+        print "RESPONSE {!r}: {!r}".format(response.status, response.body)
+        self.assertEqual(response.output_status, '500 Internal Server Error')
+        self.assertIn('Unknown credential: 9898', response.body[0])
 
 
     def test_add_creds_request1(self):
@@ -401,7 +462,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
 
         # try again with blinding
         self.authbackend.expose_real_errors = False
-        response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
+        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
                                 request=j)
         print "RESPONSE2 {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '500 Internal Server Error')
@@ -519,3 +580,42 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         print "RESPONSE2 {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '500 Internal Server Error')
         self.assertEqual(response.body, [])
+
+    def test_revoke_missing_data(self):
+        """
+        Verify revoke request with missing data is rejected
+        """
+        for req_field in ['credential_id', 'reason', 'reference']:
+            a = {'revoke_creds':
+                     {'version': 1,
+                      'user_id': 'ft@example.net',
+                      'factors': [
+                        {'reason': 'Just testing',
+                         'reference': '',
+                         'credential_id': 4750,
+                         }
+                        ]
+                      }
+                 }
+            del a['revoke_creds']['factors'][0][req_field]
+            j = json.dumps(a)
+            response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
+                                    request=j)
+            self.assertIn("No '{!s}' in credential to revoke".format(req_field), response.body[0])
+
+    def test_revoke_creds_request3(self):
+        """
+        Verify revoke_creds from wrong source IP
+        """
+        a = {'revoke_creds':
+                 {'version': 1,
+                  'user_id': 'ft@example.net',
+                  'factors': [],
+                  },
+             }
+        j = json.dumps(a)
+
+        response = self.request('/revoke_creds', return_error=True, remote_hp='127.128.129.130:50001',
+                                request=j)
+        print "RESPONSE {!r}: {!r}".format(response.status, response.body)
+        self.assertEqual(response.output_status, '403 Forbidden')
