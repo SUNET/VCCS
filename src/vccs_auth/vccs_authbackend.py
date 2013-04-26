@@ -440,8 +440,6 @@ class AuthBackend(object):
                 raise
             return 500
 
-        return None
-
     def _safe_process_factors(self, parsed, process_fun):
         """
         Go through all the factors in the request and perform the requested action
