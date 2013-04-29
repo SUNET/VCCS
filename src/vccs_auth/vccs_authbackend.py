@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2012, 2013, NORDUnet A/S
+# Copyright (c) 2012, 2013 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -232,7 +232,17 @@ class FailFactor():
 
 
 class VCCSLogger():
-    def __init__(self, myname, context = '', debug = False):
+    """
+    Simple class to do logging in a unified way.
+    """
+
+    def __init__(self, myname, context = '', syslog = True, debug = False):
+        """
+        :params myname: string with name of application
+        :params context: string with auxillary data to appear in all audit log messages
+        :params syslog: boolean, log to syslog or not?
+        :params debug: boolean, controls log verbosity
+        """
         self.context = context
 
         self.logger = logging.getLogger(myname)
@@ -240,10 +250,11 @@ class VCCSLogger():
             self.logger.setLevel(logging.DEBUG)
         else:
             self.logger.setLevel(logging.INFO)
-        syslog_h = logging.handlers.SysLogHandler()
-        formatter = logging.Formatter('%(name)s: %(levelname)s %(message)s')
-        syslog_h.setFormatter(formatter)
-        self.logger.addHandler(syslog_h)
+        if syslog:
+            syslog_h = logging.handlers.SysLogHandler()
+            formatter = logging.Formatter('%(name)s: %(levelname)s %(message)s')
+            syslog_h.setFormatter(formatter)
+            self.logger.addHandler(syslog_h)
 
     def audit(self, data):
         """

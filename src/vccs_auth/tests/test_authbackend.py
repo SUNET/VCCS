@@ -47,7 +47,7 @@ import simplejson as json
 from pprint import pprint, pformat
 
 import vccs_auth
-from vccs_auth.vccs_authbackend import AuthBackend
+from vccs_auth.vccs_authbackend import AuthBackend, VCCSLogger
 import ndnkdf
 
 import pyhsm
@@ -98,17 +98,6 @@ class FakeCredentialStore():
         return True
 
 
-class FakeLogger():
-
-    def set_context(self, _ctx):
-        return
-
-    def audit(self, data):
-        sys.stdout.write("AUDIT: {!r}\n".format(data))
-
-    def error(self, data, traceback=False):
-        sys.stdout.write("ERROR: {!r}\n".format(data))
-
 class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
 
     def setUp(self):
@@ -122,7 +111,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                      0x2001: str('2001' * 16).decode('hex'),
                      }
         self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
-        self.logger = FakeLogger()
+        self.logger = VCCSLogger('test_authbackend', syslog=False)
 
         #cherrypy.root = AuthBackend(self.hasher, self.kdf, self.logger, self.credstore, self.config)
 
