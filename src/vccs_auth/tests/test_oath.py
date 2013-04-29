@@ -39,12 +39,16 @@ Test OATH authentication.
 
 import os
 import sys
+import time
 import struct
 import unittest
 import pkg_resources
 from pprint import pprint, pformat
+import hmac
+from hashlib import sha1
 
 import pyhsm
+#import pyhsm.oath_hotp
 
 import vccs_auth
 
@@ -69,17 +73,17 @@ class TestOathAuthentication(unittest.TestCase):
         self.logger = FakeLogger()
         self.credstore = FakeCredentialStore(creds={})
 
-        test_key = '3132333435363738393031323334353637383930'.decode('hex')
+        self.test_key = '3132333435363738393031323334353637383930'.decode('hex')
         self.nonce = '010203040506'.decode('hex')
         flags = struct.pack('< I', pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
         self.aead = pyhsm.soft_hsm.aesCCM(self.keys[self.key_handle], self.key_handle, self.nonce,
-                                          test_key + flags, decrypt = False)
+                                          self.test_key + flags, decrypt = False)
         print "Generated AEAD {!r}".format(self.aead.encode('hex'))
 
 
     def test_OATH_HOTP_1(self):
         """
-        Test OATH TOTP authentication.
+        Test OATH HOTP (event based) authentication.
         """
         # Generate an AEAD with the OATH RFC test key
         cred_dict = {'status' : 'active',
@@ -114,3 +118,49 @@ class TestOathAuthentication(unittest.TestCase):
         req['user_code'] = '254676'
         factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
         self.assertTrue(factor.authenticate(self.hasher, None, self.logger))
+
+
+    def test_OATH_TOTP_1(self):
+        """
+        Test OATH TOTP (time based) authentication.
+        """
+        # Generate an AEAD with the OATH RFC test key
+        cred_dict = {'status': 'active',
+                     'nonce': self.nonce,
+                     'version': 'NDNv1',
+                     'credential_id': 4712,
+                     'key_handle': self.key_handle,
+                     'aead': self.aead,
+                     'type': 'oath-totp',
+                     'digits': 8,
+                     'oath_counter': (int(time.time()) / 30) - 10,
+                     }
+        cred = vccs_auth.credential.from_dict(cred_dict, {})
+        self.credstore.add_credential(cred)
+
+        correct_code = _get_oath_code(self.test_key, (int(time.time()) / 30), cred.digits())
+
+        req = {
+            'credential_id': cred.id(),
+            'type': 'oath-totp',
+            'user_code': str((correct_code - 11111111) % 10000000),
+            }
+
+        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        # Try with incorrect OATH code
+        self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
+
+        # Try with correct code
+        req['user_code'] = str(correct_code)
+        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        self.assertTrue(factor.authenticate(self.hasher, None, self.logger))
+
+        # Try with correct code again, should be refused (replay)
+        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
+
+
+def _get_oath_code(hmac_key, counter, digits=6):
+    data = struct.pack("> Q", counter)
+    hmac_result = hmac.new(hmac_key, msg=data, digestmod=sha1).digest()
+    return pyhsm.oath_hotp.truncate(hmac_result, length=digits)
