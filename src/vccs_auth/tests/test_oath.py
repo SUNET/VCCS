@@ -48,36 +48,7 @@ import pyhsm
 
 import vccs_auth
 
-class FakeCredentialStore():
-
-    def __init__(self, aeads, key_handle, cred_id):
-        # aeads is dict {cred_id: (nonce, aead,)}
-        self.aeads = aeads
-        self.key_handle = key_handle
-        self.cred_data = {cred_id: {'status' : 'active',
-                                    'nonce' : self.aeads[cred_id][0],
-                                    'version' : 'NDNv1',
-                                    'credential_id' : cred_id,
-                                    'key_handle' : self.key_handle,
-                                    'aead' : self.aeads[cred_id][1],
-                                    'type' : 'oath-hotp',
-                                    'digits' : 6,
-                                    'oath_counter' : 1,
-                                    },
-                          }
-
-    def get_credential(self, cred_id):
-        data = {}
-        metadata = {}
-        if cred_id not in self.cred_data:
-            raise ValueError('Test have no credential with id {!r}'.format(cred_id))
-        return vccs_auth.credential.from_dict(self.cred_data[cred_id], metadata)
-
-    def update_credential(self, cred, safe=True):
-        data = cred.to_dict()
-        self.cred_data[data['credential_id']] = data
-        return True
-
+from common import FakeCredentialStore
 
 class FakeLogger():
 
@@ -91,37 +62,52 @@ class TestOathAuthentication(unittest.TestCase):
         datadir = pkg_resources.resource_filename(__name__, 'data')
         self.config_file = os.path.join(datadir, 'test_config.ini')
         self.config = vccs_auth.config.VCCSAuthConfig(self.config_file, debug)
-        key_handle = 0x2001
-        self.keys = {key_handle: str('2001' * 16).decode('hex'),
+        self.key_handle = 0x2001
+        self.keys = {self.key_handle: str('2001' * 16).decode('hex'),
                      }
         self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
         self.logger = FakeLogger()
-        # Generate an AEAD with the OATH RFC test key
-        self.cred_id1 = 4712
+        self.credstore = FakeCredentialStore(creds={})
+
         test_key = '3132333435363738393031323334353637383930'.decode('hex')
-        nonce = '010203040506'.decode('hex')
+        self.nonce = '010203040506'.decode('hex')
         flags = struct.pack('< I', pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
-        aead = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce,
-                                     test_key + flags, decrypt = False)
-        print "Generated AEAD {!r}".format(aead.encode('hex'))
-        aeads = {self.cred_id1: (nonce, aead,),
-                 }
-        self.credstore = FakeCredentialStore(aeads, key_handle, self.cred_id1)
+        self.aead = pyhsm.soft_hsm.aesCCM(self.keys[self.key_handle], self.key_handle, self.nonce,
+                                          test_key + flags, decrypt = False)
+        print "Generated AEAD {!r}".format(self.aead.encode('hex'))
+
 
     def test_OATH_HOTP_1(self):
         """
         Test OATH TOTP authentication.
         """
+        # Generate an AEAD with the OATH RFC test key
+        cred_dict = {'status' : 'active',
+                     'nonce' : self.nonce,
+                     'version' : 'NDNv1',
+                     'credential_id' : 4712,
+                     'key_handle' : self.key_handle,
+                     'aead' : self.aead,
+                     'type' : 'oath-hotp',
+                     'digits' : 6,
+                     'oath_counter' : 1,
+                     }
+        cred = vccs_auth.credential.from_dict(cred_dict, {})
+        self.credstore.add_credential(cred)
+
         # this request matches the examples/example-oath-json output
         req = {
-            'credential_id': self.cred_id1,
+            'credential_id': cred.id(),
             'type': 'oath-hotp',
             'user_code': '338314',
             }
+
         factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
         self.assertTrue(factor.authenticate(self.hasher, None, self.logger))
 
-        # test with the same code again (should fail)
+        # test with the same code again (should fail, not because of re-use but because
+        # the starting offset of the credential has now moved past where the user_code
+        # was found)
         self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
 
         # test with next code (OATH RFC test vector, counter = 5)
