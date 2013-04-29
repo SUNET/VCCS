@@ -115,6 +115,7 @@ class VCCSSoftHasher(VCCSHasher):
     def __init__(self, keys, lock, debug=False):
         VCCSHasher.__init__(self, lock)
         self.keys = keys
+        self.debug = debug
 
     def safe_hmac_sha1(self, key_handle, data):
         """

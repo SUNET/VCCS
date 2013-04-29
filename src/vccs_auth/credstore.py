@@ -68,11 +68,12 @@ class VCCSAuthCredentialStore():
         """
         raise NotImplementedError("Subclass should implement add_credential")
 
-    def update_credential(self, cred):
+    def update_credential(self, cred, safe=True):
         """
         Update an existing credential in the database.
 
         :param cred: VCCSAuthCredential object
+        :param safe: boolean, sub-class specific meaning
         :returns: True on success
         """
         raise NotImplementedError("Subclass should implement update_credential")
@@ -144,7 +145,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
                 }
         try:
             return self.credentials.insert(docu)
-        except pymongo.errors.DuplicateKeyError, e:
+        except pymongo.errors.DuplicateKeyError:
             return False
 
     def update_credential(self, cred, safe=True):
