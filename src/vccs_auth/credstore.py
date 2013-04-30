@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2013, NORDUnet A/S
+# Copyright (c) 2013 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -91,9 +91,15 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
      }
     """
 
-    def __init__(self, host, port, logger, collection="vccs_auth_credstore", **kwargs):
+    def __init__(self, uri, logger, conn=None, collection="vccs_auth_credstore", **kwargs):
         VCCSAuthCredentialStore.__init__(self)
-        self.connection = pymongo.MongoClient(host, port, **kwargs)
+        if conn is not None:
+            self.connection = conn
+        else:
+            if "replicaSet=" in uri:
+                self.connection = pymongo.mongo_replica_set_client.MongoReplicaSetClient(uri, **kwargs)
+            else:
+                self.connection = pymongo.MongoClient(uri, **kwargs)
         self.db = self.connection[collection]
         self.credentials = self.db.credentials
         for this in xrange(2):

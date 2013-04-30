@@ -515,7 +515,7 @@ def main(myname = 'vccs_authbackend'):
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
-    credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, None, logger)
+    credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, logger)
 
     cherry_conf = {'server.thread_pool': config.num_threads,
                    'server.socket_port': config.listen_port,
