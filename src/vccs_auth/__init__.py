@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013, NORDUnet A/S
+# Copyright (c) 2013 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -49,6 +49,15 @@ __organization__ = 'NORDUnet'
 __license__ = 'BSD'
 __authors__ = ['Fredrik Thulin']
 
+import vccs_auth.common
+import vccs_auth.config
+import vccs_auth.credential
+import vccs_auth.credstore
+import vccs_auth.factors
+import vccs_auth.hasher
+import vccs_auth.oath
+import vccs_auth.password
+
 __all__ = ['common',
            'config',
            'credential',
@@ -58,12 +67,3 @@ __all__ = ['common',
            'oath',
            'password',
     ]
-
-import vccs_auth.common
-import vccs_auth.config
-import vccs_auth.credential
-import vccs_auth.credstore
-import vccs_auth.factors
-import vccs_auth.hasher
-import vccs_auth.oath
-import vccs_auth.password
