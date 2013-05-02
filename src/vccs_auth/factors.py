@@ -56,6 +56,7 @@ class VCCSFactor():
 import vccs_auth.password
 import vccs_auth.oath
 
+# import these into the vccs_auth.factors namespace
 from vccs_auth.password import VCCSPasswordFactor
 from vccs_auth.oath import OATHHOTPFactor, OATHTOTPFactor
 

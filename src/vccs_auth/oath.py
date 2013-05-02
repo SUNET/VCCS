@@ -117,7 +117,7 @@ class OATHCommon(VCCSFactor):
                 self.cred.id(), res))
         return True
 
-    def authenticate(self, hasher, kdf, logger):
+    def authenticate(self, _hasher, _kdf, logger):
         """
         This function must be overridden.
         """

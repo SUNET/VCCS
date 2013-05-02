@@ -276,6 +276,8 @@ class AuthBackend(object):
         self.credstore = credstore
         self.config = config
         self.expose_real_errors = expose_real_errors
+        # make pylint happy
+        self.remote_ip = 'UNKNOWN'
 
     @cherrypy.expose
     def authenticate(self, request=None):
