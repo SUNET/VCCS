@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2013, NORDUnet A/S
+# Copyright (c) 2013 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -233,6 +233,7 @@ class VCCSAuthPasswordCredential(VCCSAuthCredential):
             kh=self.key_handle(),
             )
 
+
 class VCCSAuthOATHCredential(VCCSAuthCredential):
 
     def __init__(self, data, metadata, check_revoked):
@@ -245,6 +246,7 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
         self.aead(self._data['aead'])
         self.digits(self._data['digits'])
         self.oath_counter(self._data['oath_counter'])
+        self.user_id(self._data['user_id'])
 
     def version(self, new=None):
         val = self._data['version']
@@ -270,7 +272,7 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
             if len(new) == 6:
                 new = new.encode('hex')
             if len(new) != 12:
-                raise ValueError("Invalid 'nonce' (expect 12 chars hex string): {!r}".format(new))
+                raise ValueError("Invalid 'nonce' (expect 6 bytes/12 chars hex string): {!r}".format(new))
             self._data['nonce'] = str(new)
         return val
 
@@ -283,7 +285,7 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
             if len(new) == 32:
                 new = new.encode('hex')
             if len(new) != 64:
-                raise ValueError("Invalid 'aead' (expect 64 chars hex string): {!r}".format(new))
+                raise ValueError("Invalid 'aead' (expect 32 bytes/64 chars hex string): {!r}".format(new))
             self._data['aead'] = str(new)
         return val
 
@@ -301,6 +303,14 @@ class VCCSAuthOATHCredential(VCCSAuthCredential):
             if not isinstance(new, int) or new < 0:
                 raise ValueError("Invalid 'oath_counter': {!r}".format(new))
             self._data['oath_counter'] = new
+        return val
+
+    def user_id(self, new=None):
+        val = self._data['user_id']
+        if new is not None:
+            if not isinstance(new, basestring):
+                raise ValueError("Invalid 'user_id': {!r}".format(new))
+            self._data['user_id'] = new
         return val
 
 

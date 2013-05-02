@@ -85,6 +85,7 @@ class TestOathAuthentication(unittest.TestCase):
         """
         Test OATH HOTP (event based) authentication.
         """
+        user_id = 'ft@example.net'
         # Generate an AEAD with the OATH RFC test key
         cred_dict = {'status' : 'active',
                      'nonce' : self.nonce,
@@ -95,6 +96,7 @@ class TestOathAuthentication(unittest.TestCase):
                      'type' : 'oath-hotp',
                      'digits' : 6,
                      'oath_counter' : 1,
+                     'user_id': user_id,
                      }
         cred = vccs_auth.credential.from_dict(cred_dict, {})
         self.credstore.add_credential(cred)
@@ -106,7 +108,7 @@ class TestOathAuthentication(unittest.TestCase):
             'user_code': '338314',
             }
 
-        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        factor = vccs_auth.oath.from_factor(req, 'auth', user_id, self.credstore, self.config)
         self.assertTrue(factor.authenticate(self.hasher, None, self.logger))
 
         # test with the same code again (should fail, not because of re-use but because
@@ -116,14 +118,45 @@ class TestOathAuthentication(unittest.TestCase):
 
         # test with next code (OATH RFC test vector, counter = 5)
         req['user_code'] = '254676'
-        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        factor = vccs_auth.oath.from_factor(req, 'auth', user_id, self.credstore, self.config)
         self.assertTrue(factor.authenticate(self.hasher, None, self.logger))
+
+    def test_OATH_HOTP_bad_user_id(self):
+        """
+        Test OATH HOTP (event based) authentication with someone else's credential.
+        """
+        user_id = 'alice@example.net'
+        # Generate an AEAD with the OATH RFC test key
+        cred_dict = {'status' : 'active',
+                     'nonce' : self.nonce,
+                     'version' : 'NDNv1',
+                     'credential_id' : 4712,
+                     'key_handle' : self.key_handle,
+                     'aead' : self.aead,
+                     'type' : 'oath-hotp',
+                     'digits' : 6,
+                     'oath_counter' : 1,
+                     'user_id': user_id,
+                     }
+        cred = vccs_auth.credential.from_dict(cred_dict, {})
+        self.credstore.add_credential(cred)
+
+        # this request matches the examples/example-oath-json output
+        req = {
+            'credential_id': cred.id(),
+            'type': 'oath-hotp',
+            'user_code': '338314',
+            }
+
+        factor = vccs_auth.oath.from_factor(req, 'auth', 'bob@example.net', self.credstore, self.config)
+        self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
 
 
     def test_OATH_TOTP_1(self):
         """
         Test OATH TOTP (time based) authentication.
         """
+        user_id = 'ft@example.net'
         # Generate an AEAD with the OATH RFC test key
         cred_dict = {'status': 'active',
                      'nonce': self.nonce,
@@ -134,6 +167,7 @@ class TestOathAuthentication(unittest.TestCase):
                      'type': 'oath-totp',
                      'digits': 8,
                      'oath_counter': (int(time.time()) / 30) - 10,
+                     'user_id': user_id,
                      }
         cred = vccs_auth.credential.from_dict(cred_dict, {})
         self.credstore.add_credential(cred)
@@ -146,17 +180,49 @@ class TestOathAuthentication(unittest.TestCase):
             'user_code': str((correct_code - 11111111) % 10000000),
             }
 
-        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        factor = vccs_auth.oath.from_factor(req, 'auth', user_id, self.credstore, self.config)
         # Try with incorrect OATH code
         self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
 
         # Try with correct code
         req['user_code'] = str(correct_code)
-        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        factor = vccs_auth.oath.from_factor(req, 'auth', user_id, self.credstore, self.config)
         self.assertTrue(factor.authenticate(self.hasher, None, self.logger))
 
         # Try with correct code again, should be refused (replay)
-        factor = vccs_auth.oath.from_factor(req, 'auth', self.credstore, self.config)
+        factor = vccs_auth.oath.from_factor(req, 'auth', user_id, self.credstore, self.config)
+        self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
+
+    def test_OATH_TOTP_bad_user_id(self):
+        """
+        Test OATH TOTP (time based) authentication with someone else's credential.
+        """
+        user_id = 'alice@example.net'
+        # Generate an AEAD with the OATH RFC test key
+        cred_dict = {'status': 'active',
+                     'nonce': self.nonce,
+                     'version': 'NDNv1',
+                     'credential_id': 4712,
+                     'key_handle': self.key_handle,
+                     'aead': self.aead,
+                     'type': 'oath-totp',
+                     'digits': 8,
+                     'oath_counter': (int(time.time()) / 30) - 10,
+                     'user_id': user_id,
+                     }
+        cred = vccs_auth.credential.from_dict(cred_dict, {})
+        self.credstore.add_credential(cred)
+
+        correct_code = _get_oath_code(self.test_key, (int(time.time()) / 30), cred.digits())
+
+        req = {
+            'credential_id': cred.id(),
+            'type': 'oath-totp',
+            'user_code': str((correct_code - 11111111) % 10000000),
+            }
+
+        factor = vccs_auth.oath.from_factor(req, 'auth', 'bob@example.net', self.credstore, self.config)
+        # Try with incorrect OATH code
         self.assertFalse(factor.authenticate(self.hasher, None, self.logger))
 
 

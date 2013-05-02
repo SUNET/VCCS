@@ -53,7 +53,7 @@ class OATHCommon(VCCSFactor):
     before a successful response is returned in order to ensure that we do
     not accept an OATH OTP more than once.
     """
-    def __init__(self, oath_type, action, req, credstore, config):
+    def __init__(self, oath_type, action, req, user_id, credstore, config):
         self.type = oath_type
         self.credstore = credstore
         config = config
@@ -67,6 +67,7 @@ class OATHCommon(VCCSFactor):
                         self.cred))
 
             self._user_code = int(req['user_code'])
+            self._user_id = user_id
         elif action == 'add_creds':
             if config.add_creds_oath_version != 'NDNv1':
                 raise VCCSAuthenticationError("Add OATH credentials of version {!r} not implemented".format(
@@ -83,6 +84,7 @@ class OATHCommon(VCCSFactor):
                          'digits':        req['digits'],
                          'credential_id': req['credential_id'],
                          'oath_counter':  req['oath_counter'],
+                         'user_id':       user_id,
                          }
             self.cred = vccs_auth.credential.from_dict(cred_data, None)
         else:
@@ -100,14 +102,14 @@ class OATHCommon(VCCSFactor):
         """
         hasher.lock_acquire()
         try:
-            # test load AEAD
+            # verify AEAD
             if not hasher.load_temp_key(self.cred.nonce().decode('hex'),
                                         self.cred.key_handle(),
                                         self.cred.aead().decode('hex'),
                                         ):
-                raise VCCSAuthenticationError("Loading HMAC key failed")
+                raise VCCSAuthenticationError("Loading AEAD failed")
         except Exception, e:
-            raise VCCSAuthenticationError("Loading HMAC key failed : {!s}".format(e))
+            raise VCCSAuthenticationError("Loading AEAD failed : {!s}".format(e))
         finally:
             hasher.lock_release()
         res = self.credstore.add_credential(self.cred)
@@ -119,7 +121,16 @@ class OATHCommon(VCCSFactor):
         """
         This function must be overridden.
         """
-        raise NotImplementedError('sub-class must implement authenticate()')
+        # Since the HMAC key/AEAD isn't cryptographically bound to a specific user,
+        # a check of the user id in the request against what is in the credential store
+        # for this credential is necessary to prevent copy-paste attacks by an attacker
+        # that can modify the user database.
+        if self.cred.user_id() != self._user_id:
+            logger.audit("result=FAIL, factor={name}, user_id={user_id}, reason={reason}".format( \
+                    name=self.type, user_id=self._user_id, reason='USER_ID_MISMATCH'))
+            return False
+        # None to avoid being mistaken for a complete authentication
+        return None
 
     def _look_for_match(self, start_counter, offsets, hasher, logger):
         """
@@ -198,10 +209,13 @@ class OATHHOTPFactor(OATHCommon):
     locked, that is a 1 in 47619 chance. With enough accounts to guess against, the
     attacker is sure to guess the right code in a rather short timeframe.
     """
-    def __init__(self, action, req, credstore, config):
-        OATHCommon.__init__(self, 'oath-hotp', action, req, credstore, config)
+    def __init__(self, action, req, user_id, credstore, config):
+        OATHCommon.__init__(self, 'oath-hotp', action, req, user_id, credstore, config)
 
     def authenticate(self, hasher, _kdf, logger):
+        res = OATHCommon.authenticate(self, hasher, _kdf, logger)
+        if res is False:
+            return False
         # Compare the user supplied code with expected, expected + 1, ... expected + 3
         offsets = [1, 2, 3, 4]
         res = self._look_for_match(self.cred.oath_counter(), offsets, hasher, logger)
@@ -218,17 +232,20 @@ class OATHTOTPFactor(OATHCommon):
     the only thing we compensate for is the user (or network) being slow in entering
     the code - meaning we accept the current expected code, and the last one.
     """
-    def __init__(self, action, req, credstore, config):
-        OATHCommon.__init__(self, 'oath-totp', action, req, credstore, config)
+    def __init__(self, action, req, user_id, credstore, config):
+        OATHCommon.__init__(self, 'oath-totp', action, req, user_id, credstore, config)
 
     def authenticate(self, hasher, _kdf, logger):
+        res = OATHCommon.authenticate(self, hasher, _kdf, logger)
+        if res is False:
+            return False
         # Compare the user supplied code with current time, and current time - 30
         now = int(time.time() / _OATH_TOTP_TIME_DIVIDER)
         offsets = [0, -1]
         res = self._look_for_match(now, offsets, hasher, logger)
         return res
 
-def from_factor(req, action, credstore, config):
+def from_factor(req, action, user_id, credstore, config):
     """
     Part of parsing authentication/add_credentials requests received.
 
@@ -236,12 +253,13 @@ def from_factor(req, action, credstore, config):
 
     :params req: parsed request as dict
     :params action: String, either 'auth' or 'add_creds'
+    :params user_id: string, persistent user id
     :params credstore: VCCSAuthCredentialStore instance
     :params config: VCCSAuthConfig instance
     :returns: VCCSFactor instance
     """
     if req['type'] == 'oath-hotp' :
-        return OATHHOTPFactor(action, req, credstore, config)
+        return OATHHOTPFactor(action, req, user_id, credstore, config)
     elif req['type'] == 'oath-totp' :
-        return OATHTOTPFactor(action, req, credstore, config)
+        return OATHTOTPFactor(action, req, user_id, credstore, config)
     raise VCCSAuthenticationError('Unknown OATH factor type {!r}'.format(req['type']))
