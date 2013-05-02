@@ -71,14 +71,13 @@ class OATHCommon(VCCSFactor):
             if config.add_creds_oath_version != 'NDNv1':
                 raise VCCSAuthenticationError("Add OATH credentials of version {!r} not implemented".format(
                         config.add_creds_password_version))
-            if not config.add_creds_oath_key_handle:
-                raise VCCSAuthenticationError("Add password credentials key_handle not set".format(
-                        config.add_creds_password_version))
+            if not req['key_handle'] in config.add_creds_oath_key_handles_allow:
+                raise VCCSAuthenticationError("Add OATH credentials key_handle {!r} not in allowed list {!r}".format(
+                        req['key_handle'], config.add_creds_oath_key_handles_allow))
             cred_data = {'type':          self.type,
                          'status':        'active',
                          'version':       'NDNv1',
-                          # XXX how do we know that the generator used the same key_handle as we have?
-                         'key_handle':    config.add_creds_oath_key_handle,
+                         'key_handle':    req['key_handle'],
                          'nonce':         req['nonce'],
                          'aead':          req['aead'],
                          'digits':        req['digits'],

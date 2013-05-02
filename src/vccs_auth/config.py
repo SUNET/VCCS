@@ -58,7 +58,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'add_creds_password_kdf_iterations': '50000',
                     'add_creds_password_salt_bytes': str(128 / 8),
                     'add_creds_oath_version': 'NDNv1',
-                    'add_creds_oath_key_handle': None,
+                    'add_creds_oath_key_handles_allow': [], # comma-separated list of integers
                     }
 
 _CONFIG_SECTION = 'vccs_authbackend'
@@ -76,6 +76,9 @@ class VCCSAuthConfig():
             [x.strip() for x in self.config.get(self.section, 'add_creds_allow').split(',')]
         self._parsed_revoke_creds_allow = \
             [x.strip() for x in self.config.get(self.section, 'revoke_creds_allow').split(',')]
+        tmp_key_handles = self.config.get(self.section, 'add_creds_oath_key_handles_allow').split(',')
+        self._parsed_add_creds_oath_key_handles_allow = \
+            [pyhsm.util.key_handle_to_int(x.strip()) for x in tmp_key_handles]
 
     @property
     def yhsm_device(self):
@@ -224,20 +227,14 @@ class VCCSAuthConfig():
         return self.config.get(self.section, 'add_creds_oath_version')
 
     @property
-    def add_creds_oath_key_handle(self):
+    def add_creds_oath_key_handles_allow(self):
         """
-        Add OATH credentials using this key handle (integer).
+        Allow new OATH credentials protected using one of these key handles (integer).
 
-        This is really a requirement for the generating application to use this
-        exact key handle, or the AEADs generated can't be validated and will not
+        Comma-separated list of integers (decimal or hexadecimal).
+
+        This is really a requirement for the generating application to use one of
+        these key handles, or the AEADs generated can't be validated and will not
         be accepted for addition to the credential store.
-
-        NOTE: This parameter might be removed if it becomes clear that this is
-        a bad operational model. Maybe all OATH AEADs that can be validated using
-        _any_ of the available validation key handles should be accepted?
         """
-        res = self.config.get(self.section, 'add_creds_oath_key_handle')
-        if not res:
-            raise VCCSAuthenticationError("add_creds_oath_key_handle not set")
-        return pyhsm.util.key_handle_to_int(res)
-
+        return self._parsed_add_creds_oath_key_handles_allow

@@ -298,7 +298,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         Verify correct add_credentials OATH request
         """
-        key_handle = self.config.add_creds_oath_key_handle
+        key_handle = self.config.add_creds_oath_key_handles_allow[0]
         test_key = str('aa' * 20).decode('hex')
         nonce = '010203040506'.decode('hex')
         flags = struct.pack('< I', pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
@@ -313,6 +313,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                      'credential_id': cred_id,
                      'digits': 6,
                      'nonce': nonce.encode('hex'),
+                     'key_handle': key_handle,
                      'oath_counter': 0,
                      'type': 'oath-hotp',
                      },
@@ -353,6 +354,72 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                                 request=j)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '403 Forbidden')
+
+    def test_add_creds_request3b(self):
+        """
+        Verify add_credentials OATH request with unknown key handle
+        """
+        key_handle = self.config.add_creds_oath_key_handles_allow[0]
+        test_key = str('aa' * 20).decode('hex')
+        nonce = '010203040506'.decode('hex')
+        flags = struct.pack('< I', pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
+        aead = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce,
+                                     test_key + flags, decrypt = False)
+        cred_id = 4740
+        a = {'add_creds':
+                 {'version': 1,
+                  'user_id': 'ft@example.net',
+                  'factors': [
+                    {'aead': aead.encode('hex'),
+                     'credential_id': cred_id,
+                     'digits': 6,
+                     'nonce': nonce.encode('hex'),
+                     'key_handle': key_handle + 55,
+                     'oath_counter': 0,
+                     'type': 'oath-hotp',
+                     },
+                    ]
+                  }
+             }
+        j = json.dumps(a)
+
+        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
+                                request=j)
+        print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
+        self.assertIn('Add OATH credentials key_handle {} not in allowed list'.format(key_handle + 55),
+                      response.body[0])
+        self.assertEqual(response.output_status, '500 Internal Server Error')
+
+    def test_add_creds_request3c(self):
+        """
+        Verify add_credentials OATH request with incorrect AEAD
+        """
+        key_handle = self.config.add_creds_oath_key_handles_allow[0]
+        nonce = '010203040506'.decode('hex')
+        aead = ('aa' * 32).decode('hex')
+        cred_id = 4740
+        a = {'add_creds':
+                 {'version': 1,
+                  'user_id': 'ft@example.net',
+                  'factors': [
+                    {'aead': aead.encode('hex'),
+                     'credential_id': cred_id,
+                     'digits': 6,
+                     'nonce': nonce.encode('hex'),
+                     'key_handle': key_handle,
+                     'oath_counter': 0,
+                     'type': 'oath-hotp',
+                     },
+                    ]
+                  }
+             }
+        j = json.dumps(a)
+
+        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
+                                request=j)
+        print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
+        self.assertIn('AEAD integrity check failed', response.body[0])
+        self.assertEqual(response.output_status, '500 Internal Server Error')
 
     def test_add_creds_request4(self):
         """
