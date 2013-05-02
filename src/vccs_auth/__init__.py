@@ -53,6 +53,7 @@ __all__ = ['common',
            'config',
            'credential',
            'credstore',
+           'factors',
            'hasher',
            'oath',
            'password',
@@ -62,6 +63,7 @@ import vccs_auth.common
 import vccs_auth.config
 import vccs_auth.credential
 import vccs_auth.credstore
+import vccs_auth.factors
 import vccs_auth.hasher
 import vccs_auth.oath
 import vccs_auth.password

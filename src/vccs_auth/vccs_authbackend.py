@@ -157,24 +157,19 @@ class AuthRequest(BaseRequest):
 
     def __init__(self, json, credstore, config, top_node, logger):
         """
-        :params top_node: String, either 'auth' or 'add_creds'
+        :params json: string, request
+        :params credstore: VCCSAuthCredentialStore instance
+        :params config: VCCSAuthConfig instance
+        :params top_node: String, either 'auth' or 'add_creds' - part of JSON request to parse
+        :params logger: VCCSLogger instance
         """
         BaseRequest.__init__(self, json, top_node, logger)
 
         self._factors = []
         for factor in self._parsed_req['factors']:
-            this = None
-            if factor['type'] == 'password':
-                this = vccs_auth.password.from_factor(factor, top_node, self._user_id, credstore, config)
-            elif factor['type'] == 'oath-hotp' or factor['type'] == 'oath-totp':
-                this = vccs_auth.oath.from_factor(factor, top_node, credstore, config)
-
+            this = vccs_auth.factors.from_dict(factor, top_node, self._user_id, credstore, config)
             if this:
                 self._factors.append(this)
-            else:
-                # eventually fail on unknown type (or action), but continue processing to consume any OTPs
-                self._factors.append(FailFactor('Unknown authentication factor type {!r} or action {!r}'.format(
-                            factor['type'], top_node)))
 
 
 class RevokeRequest(BaseRequest):
@@ -213,22 +208,6 @@ class RevokeRequest(BaseRequest):
                 if not isinstance(factor[str_field], basestring):
                     raise VCCSAuthenticationError("Invalid {!r} (not string)" % (str_field))
             self._factors.append(factor)
-
-
-class FailFactor():
-    """
-    Eventually fail authentication.
-    """
-    def __init__(self, reason):
-        self.type = 'fail'
-        self.reason = reason
-
-    def authenticate(self, _hasher, _kdf, logger):
-        logger.audit("result=FAIL, factor=fail, reason={}".format(self.reason))
-        return False
-
-    def add_credential(self, _hasher, _kdf, _logger):
-        raise VCCSAuthenticationError("Impossible to add_credential with FailFactor")
 
 
 class VCCSLogger():

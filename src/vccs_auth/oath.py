@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2012, 2013, NORDUnet A/S
+# Copyright (c) 2012, 2013 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -40,19 +40,18 @@ import pyhsm.oath_hotp
 
 import vccs_auth.credential
 from vccs_auth.common import VCCSAuthenticationError
+from vccs_auth.factors import VCCSFactor
 
 _OATH_TOTP_TIME_DIVIDER = 30
 
-class OATHCommon():
+class OATHCommon(VCCSFactor):
     """
     Base class for authentication factors based on the OATH-HOTP algorithm
     specified in RFC4226. Currently, these is event based and time based.
 
-    Do note that the authentication backend is stateless, and won't detect
-    a replayed OTP. The logic to detect replays must be in the frontends,
-    that - after a successful authentication - must compare the current
-    code with previous ones to make sure it hasn't been used in a previous
-    request, or a simultaneous request to another frontend server.
+    The OATH counter value is stored in the credential store, and updated
+    before a successful response is returned in order to ensure that we do
+    not accept an OATH OTP more than once.
     """
     def __init__(self, oath_type, action, req, credstore, config):
         self.type = oath_type
@@ -78,6 +77,7 @@ class OATHCommon():
             cred_data = {'type':          self.type,
                          'status':        'active',
                          'version':       'NDNv1',
+                          # XXX how do we know that the generator used the same key_handle as we have?
                          'key_handle':    config.add_creds_oath_key_handle,
                          'nonce':         req['nonce'],
                          'aead':          req['aead'],
@@ -234,9 +234,15 @@ def from_factor(req, action, credstore, config):
     Part of parsing authentication/add_credentials requests received.
 
     Figure out what kind of object should be initialized, and return it.
+
+    :params req: parsed request as dict
+    :params action: String, either 'auth' or 'add_creds'
+    :params credstore: VCCSAuthCredentialStore instance
+    :params config: VCCSAuthConfig instance
+    :returns: VCCSFactor instance
     """
-    if action == 'auth' or action == 'add_creds':
-        if req['type'] == 'oath-hotp' :
-            return OATHHOTPFactor(action, req, credstore, config)
-        elif req['type'] == 'oath-totp' :
-            return OATHTOTPFactor(action, req, credstore, config)
+    if req['type'] == 'oath-hotp' :
+        return OATHHOTPFactor(action, req, credstore, config)
+    elif req['type'] == 'oath-totp' :
+        return OATHTOTPFactor(action, req, credstore, config)
+    raise VCCSAuthenticationError('Unknown OATH factor type {!r}'.format(req['type']))

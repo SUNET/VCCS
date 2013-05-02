@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2012, 2013, NORDUnet A/S
+# Copyright (c) 2012, 2013 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -35,8 +35,9 @@
 
 import vccs_auth.credential
 from vccs_auth.common import VCCSAuthenticationError
+from vccs_auth.factors import VCCSFactor
 
-class VCCSPasswordFactor():
+class VCCSPasswordFactor(VCCSFactor):
     """
     Password authentication factor.
 
@@ -190,6 +191,12 @@ def from_factor(req, action, user_id, credstore, config):
     Part of parsing authentication/add_credentials requests received.
 
     Figure out what kind of object should be initialized, and return it.
+
+    :params req: parsed request as dict
+    :params action: String, either 'auth' or 'add_creds'
+    :params user_id: string, persistent user id
+    :params credstore: VCCSAuthCredentialStore instance
+    :params config: VCCSAuthConfig instance
+    :returns: VCCSPasswordFactor instance
     """
-    if action == 'auth' or action == 'add_creds':
-        return VCCSPasswordFactor(action, req, user_id, credstore, config)
+    return VCCSPasswordFactor(action, req, user_id, credstore, config)
