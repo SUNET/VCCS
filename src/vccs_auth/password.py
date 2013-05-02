@@ -48,7 +48,7 @@ class VCCSPasswordFactor(VCCSFactor):
     of the NIST approved PBKDF2-HMAC-SHA512 algorithm for key stretching.
     """
     def __init__(self, action, req, user_id, credstore, config):
-        self.type = 'password'
+        VCCSFactor.__init__(self, 'password')
         self._user_id = str(user_id)
         self._H1 = str(req['H1'])
         self.config = config

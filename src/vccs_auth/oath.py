@@ -54,7 +54,7 @@ class OATHCommon(VCCSFactor):
     not accept an OATH OTP more than once.
     """
     def __init__(self, oath_type, action, req, user_id, credstore, config):
-        self.type = oath_type
+        VCCSFactor.__init__(self, oath_type)
         self.credstore = credstore
         config = config
         if action == 'auth':
