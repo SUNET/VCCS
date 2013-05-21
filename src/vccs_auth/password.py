@@ -1,4 +1,3 @@
-#!/usr/bin/python
 #
 # Copyright (c) 2012, 2013 NORDUnet A/S
 # All rights reserved.
