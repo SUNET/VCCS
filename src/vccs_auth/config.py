@@ -58,7 +58,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'add_creds_password_kdf_iterations': '50000',
                     'add_creds_password_salt_bytes': str(128 / 8),
                     'add_creds_oath_version': 'NDNv1',
-                    'add_creds_oath_key_handles_allow': [], # comma-separated list of integers
+                    'add_creds_oath_key_handles_allow': '', # comma-separated list of integers
                     }
 
 _CONFIG_SECTION = 'vccs_authbackend'
