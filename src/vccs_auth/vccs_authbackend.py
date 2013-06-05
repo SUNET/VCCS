@@ -256,6 +256,10 @@ class VCCSLogger():
         """
         Set data to be included in all future audit logs.
         """
+        # XXX this might not be thread safe! Must test if logging is mangled with
+        # concurrent authentication requests for different users/from different addresses.
+        # Potential solution would be to store context info in cherrypy request object instead,
+        # since documentation actually says it can be used like that.
         self.context = ', '.join([k + '=' + v for (k, v) in context.items()])
 
 
