@@ -49,6 +49,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'mongodb_uri': '127.0.0.1',
                     'add_creds_allow': '', # comma-separated list of IP addresses
                     'revoke_creds_allow': '', # comma-separated list of IP addresses
+                    'listen_addr': '127.0.0.1',
                     'listen_port': '8550',
                     'kdf_min_iterations': '20000',
                     'kdf_max_iterations': '500000',
@@ -170,6 +171,13 @@ class VCCSAuthConfig():
         service when used.
         """
         return self.config.getint(self.section, 'kdf_max_iterations')
+
+    @property
+    def listen_addr(self):
+        """
+        IP address to listen on.
+        """
+        return self.config.get(self.section, 'listen_addr')
 
     @property
     def listen_port(self):

@@ -503,6 +503,7 @@ def main(myname = 'vccs_authbackend'):
     credstore = VCCSAuthCredentialStoreMongoDB(config.mongodb_uri, logger)
 
     cherry_conf = {'server.thread_pool': config.num_threads,
+                   'server.socket_host': config.listen_addr,
                    'server.socket_port': config.listen_port,
                    # enables X-Forwarded-For, since BCP is to run this server
                    # behind a webserver that handles SSL
