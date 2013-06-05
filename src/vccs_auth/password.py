@@ -59,9 +59,10 @@ class VCCSPasswordFactor(VCCSFactor):
             raise VCCSAuthenticationError("Bad H1: {!r}".format(self._H1))
 
         if action == 'auth':
-            self.cred = credstore.get_credential(req['credential_id'])
+            _cred_id = str(req['credential_id'])
+            self.cred = credstore.get_credential(_cred_id)
             if not self.cred:
-                raise VCCSAuthenticationError("Unknown credential: {!r}".format(req['credential_id']))
+                raise VCCSAuthenticationError("Unknown credential: {!r}".format(_cred_id))
             if self.cred.type() != self.type:
                 raise VCCSAuthenticationError("Credential {!r} has unexpected type: {!r}".format(
                         self.cred.type()))
@@ -92,7 +93,7 @@ class VCCSPasswordFactor(VCCSFactor):
                          'key_handle':    config.add_creds_password_key_handle,
                          'iterations':    config.add_creds_password_kdf_iterations,
                          'salt':          None,  # will be added later, in add_credential()
-                         'credential_id': req['credential_id'],
+                         'credential_id': str(req['credential_id']),
                          }
             self.cred = vccs_auth.credential.from_dict(cred_data, None)
         else:
@@ -150,7 +151,7 @@ class VCCSPasswordFactor(VCCSFactor):
         H2 = PBKDF2-HMAC-SHA512(T2, iterations=1, local_salt)
         """
         # Lock down key usage & credential to auth
-        T1 = '|'.join(['A', self._user_id, str(self.cred.id()), self._H1])
+        T1 = '|'.join(['A', self._user_id, self.cred.id(), self._H1])
 
         # This is the really time consuming PBKDF2 step.
         T2 = kdf.pbkdf2_hmac_sha512(T1, self.cred.iterations(), self.cred.salt_as_bytes())

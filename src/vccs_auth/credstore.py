@@ -53,7 +53,7 @@ class VCCSAuthCredentialStore():
         Unless check_active is False, it will be verified that this is not a
         revoked credential.
 
-        :param credential_id: unique identifier as integer
+        :param credential_id: unique identifier as string
         :returns: VCCSAuthCredential object
         """
         raise NotImplementedError("Subclass should implement get_credential")
@@ -114,16 +114,16 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         """
         Retrieve a credential from the database based on it's credential_id (not _id).
 
-        The credential_id is an integer supplied to the authentication backends
+        The credential_id is a string supplied to the authentication backends
         from the frontend servers.
 
-        :param credential_id: integer
+        :param credential_id: string
         :param check_revoked: boolean - True to raise exception on revoked credentials
         :return: VCCSAuthCredential object
         """
-        if not isinstance(credential_id, int):
+        if not isinstance(credential_id, basestring):
             raise TypeError("non-integer credential_id")
-        query = {'credential.credential_id': credential_id}
+        query = {'credential.credential_id': str(credential_id)}
         res = self.credentials.find_one(query)
         if res is None:
             return None

@@ -89,9 +89,9 @@ class VCCSAuthCredential():
     def id(self, new=None):
         val = self._data['credential_id']
         if new is not None:
-            if not isinstance(new, int) or new < 0:
-                raise ValueError("Invalid 'id': {!r}".format(new))
-            self._data['credential_id'] = new
+            if not isinstance(new, basestring):
+                raise ValueError("Invalid 'credential_id': {!r}".format(new))
+            self._data['credential_id'] = str(new)
         return val
 
     def revocation_info(self, new=None):
