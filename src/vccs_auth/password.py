@@ -151,7 +151,15 @@ class VCCSPasswordFactor(VCCSFactor):
         H2 = PBKDF2-HMAC-SHA512(T2, iterations=1, local_salt)
         """
         # Lock down key usage & credential to auth
-        T1 = '|'.join(['A', self._user_id, self.cred.id(), self._H1])
+        T1 = ''
+        for this in [str(x) for x in ['A', self._user_id, self.cred.id(), self._H1]]:
+            if len(this) > 255:
+                raise VCCSAuthenticationError("Too long T1 component ({!r}... length {!r})".format(
+                        this[:10], len(this)))
+            # length-encode each part, to avoid having a designated delimiter that
+            # could potentially be misused
+            T1 += chr(len(this))
+            T1 += this
 
         # This is the really time consuming PBKDF2 step.
         T2 = kdf.pbkdf2_hmac_sha512(T1, self.cred.iterations(), self.cred.salt_as_bytes())
