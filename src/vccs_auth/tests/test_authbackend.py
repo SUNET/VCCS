@@ -150,7 +150,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                   'factors': [
                     {'type': 'password',
                      'H1': H1,
-                     'credential_id': 4711,
+                     'credential_id': '4711',
                      }
                     ]
                   }
@@ -177,7 +177,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                   'factors': [
                     {'type': 'password',
                      'H1': H1,
-                     'credential_id': 4711,
+                     'credential_id': '4711',
                      }
                     ]
                   }
@@ -236,13 +236,14 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Verify correct authentication request but with unknown credential
         """
         H1 = self._bcrypt_hash('plaintext')
+        cred_id = '9898'
         a = {'auth':
                  {'version': 1,
                   'user_id': 'ft@example.net',
                   'factors': [
                     {'type': 'password',
                      'H1': H1,
-                     'credential_id': 9898,
+                     'credential_id': cred_id,
                      }
                     ]
                   }
@@ -251,7 +252,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         response = self.request('/authenticate', request=j, return_error=True)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '500 Internal Server Error')
-        self.assertIn('Unknown credential: 9898', response.body[0])
+        self.assertIn('Unknown credential: {!r}'.format(cred_id), response.body[0])
 
 
     def test_add_creds_request1(self):
@@ -259,7 +260,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Verify correct add_credentials password request
         """
         H1 = self._bcrypt_hash('foobar')
-        cred_id = 4720
+        cred_id = '4720'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -304,7 +305,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         flags = struct.pack('< I', pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
         aead = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce,
                                      test_key + flags, decrypt = False)
-        cred_id = 4740
+        cred_id = '4740'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -365,7 +366,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         flags = struct.pack('< I', pyhsm.defines.YSM_HMAC_SHA1_GENERATE)
         aead = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce,
                                      test_key + flags, decrypt = False)
-        cred_id = 4740
+        cred_id = '4740'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -397,7 +398,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         key_handle = self.config.add_creds_oath_key_handles_allow[0]
         nonce = '010203040506'.decode('hex')
         aead = ('aa' * 32).decode('hex')
-        cred_id = 4740
+        cred_id = '4740'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -429,7 +430,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         error handling would work (one factor succeeds, next does not).
         """
         H1 = self._bcrypt_hash('foobar')
-        cred_id = 4750
+        cred_id = '4750'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -440,7 +441,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                      },
                     {'type': 'password',
                      'H1': H1,
-                     'credential_id': cred_id + 1,
+                     'credential_id': 'some-other-string',
                      }
                     ]
                   }
@@ -457,7 +458,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Test adding credential that already exists
         """
         H1 = self._bcrypt_hash('foobar')
-        cred_id = 4711
+        cred_id = '4711'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -474,7 +475,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
                                 request=j)
         print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
-        self.assertIn('Test already have credential with id 4711', response.body[0])
+        self.assertIn('Test already have credential with id {!r}'.format(cred_id), response.body[0])
         self.assertEqual(response.output_status, '500 Internal Server Error')
 
         # try again with blinding
@@ -491,7 +492,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Verify correct revoke_creds request
         """
         H1 = self._bcrypt_hash('foobar')
-        cred_id = 4721
+        cred_id = '4721'
         a = {'add_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -570,7 +571,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Verify revoke_creds for unknown credential
         """
         H1 = self._bcrypt_hash('foobar')
-        cred_id = 0
+        cred_id = u'0'
         a = {'revoke_creds':
                  {'version': 1,
                   'user_id': 'ft@example.net',
@@ -587,7 +588,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
                                 request=j)
         print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
-        self.assertIn('Unknown credential: 0', response.body[0])
+        self.assertIn('Unknown credential: {!r}'.format(cred_id), response.body[0])
         self.assertEqual(response.output_status, '500 Internal Server Error')
 
         # try again with blinding

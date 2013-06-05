@@ -46,32 +46,10 @@ from pprint import pprint, pformat
 import ndnkdf
 import vccs_auth
 
-class FakeCredentialStore():
+from common import FakeCredentialStore
 
-    def get_credential(self, cred_id):
-        data = {}
-        metadata = {}
-        if cred_id == 4711:
-            data = {'status' : 'active',
-                    'derived_key' : '41f8f2950cd0304999346d250aef82c5ff99ef45fe8437af470e421348300af7'
-                                    '256cb3b55d48459fa9787ecfb963d2b2a77070d64b647f71c460b2399c451fb7',
-                    'version' : 'NDNv1',
-                    'iterations' : 50000,
-                    'key_handle' : 0x2000,
-                    'salt' : '7e1d2271b58a779a5936a656218faedb',
-                    'kdf' : 'PBKDF2-HMAC-SHA512',
-                    'type' : 'password',
-                    'credential_id' : 4711
-                    }
-        else:
-            raise ValueError('Test have no credential with id {!r}'.format(cred_id))
-        return vccs_auth.credential.from_dict(data, metadata)
+from vccs_auth.vccs_authbackend import VCCSLogger
 
-
-class FakeLogger():
-
-    def audit(self, data):
-        sys.stdout.write("AUDIT: {!r}\n".format(data))
 
 class TestPasswordHashing(unittest.TestCase):
 
@@ -85,7 +63,7 @@ class TestPasswordHashing(unittest.TestCase):
         self.keys = {0x2000: str('2000' * 16).decode('hex'),
                      }
         self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
-        self.logger = FakeLogger()
+        self.logger = VCCSLogger('test_authbackend', syslog=False)
 
     def test_password_hash_1(self):
         """

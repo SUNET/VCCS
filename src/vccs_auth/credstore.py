@@ -122,7 +122,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         :return: VCCSAuthCredential object
         """
         if not isinstance(credential_id, basestring):
-            raise TypeError("non-integer credential_id")
+            raise TypeError("non-string credential_id")
         query = {'credential.credential_id': str(credential_id)}
         res = self.credentials.find_one(query)
         if res is None:
