@@ -173,3 +173,17 @@ NIST SP 800-57 has recommendations regarding the lifetime of an "Symmetric
 authentication key", saying that it should not be used on Originator systems
 (operation: password set) for more than two years, and not on Recipient
 systems (operation: password validation) for more than two+three years.
+
+
+
+Possible improvements
+=====================
+OpenBSD recently added a new KDF based on bcrypt. They chose to SHA-512 hash
+the input password once before passing it to bcrypt in order to try and reap
+some benefit of a password longer than the bcrypt key size (72 bytes IIRC).
+
+http://www.openbsd.org/cgi-bin/cvsweb/~checkout~/src/lib/libutil/bcrypt_pbkdf.c
+
+VCCS should perhaps do the same, to get the same benefit and also remove the
+counterintuitive limitation of max 72 character passwords. There are password
+managers that default to 100 character passwords.
