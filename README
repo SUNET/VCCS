@@ -14,23 +14,29 @@ Authentication
 
 Pseudo-code describing the authentication process :
 
-  On frontend (SAML IdP, RADIUS server etc) :
-  -------------------------------------------
+  On frontend (SAML IdP, RADIUS server etc, see python-vccs_client) :
+  -------------------------------------------------------------------
+
   credential_id, bcrypt_salt = load_from_userdb(user_id)
 
+  // Collapse password, to make use of > 72 chars (bcrypt key size)
+  T1 = SHA512(credential_id | plaintext_password)
+
   // Get rid of plaintext as soon as possible, to avoid leaking it (logs etc.)
-  T = bcrypt(credential_id | plaintext_password, bcrypt_salt)
-  H1 = remove_bcrypt_salt(T)
+  T2 = BCRYPT(T1, bcrypt_salt)
+  H1 = remove_bcrypt_salt(T2)
   send_to_backend(H1, user_id, credential_id)
 
-  On backend (dedicated hashing servers) :
-  ----------------------------------------
+
+  On backend (dedicated hashing servers, this is what is implemented here) :
+  --------------------------------------------------------------------------
+
   credential_stored_hash, iterations, salt, key_handle = \
   	load_from_private_database(credential_id)
 
   T1 = 'A' | user_id | credential_id | H1
   T2 = PBKDF2-HMAC-SHA512(T1, iterations=many, salt)
-  local_salt = yhsm_hmac_sha1(T2)
+  local_salt = YHSM_HMAC_SHA1(T2)
   H2 = PBKDF2-HMAC-SHA512(T2, iterations=1, local_salt)
 
   audit_log(frontend_id, credential_id, trunc(H2), trunc(credential_stored_hash))
@@ -64,8 +70,22 @@ only 32 bit operations (such as contemporary GPUs).
 Annotations for the hashing scheme
 ==================================
 
-  T = bcrypt(credential_id | plaintext_password, userdb_stored_salt)
-  H1 = remove_bcrypt_salt(T)
+Authentication client code (see separate project python-vccs_client) :
+
+  // Collapse password, to make use of > 72 chars (bcrypt key size)
+  T1 = SHA512(credential_id | plaintext_password)
+
+bcrypt key size is 72 characters. Any difference in the entered password after
+the first 72 characters is not reflected in the output. Having an upper length
+of passwords in VCCS is counterintuitive, and might introduce challenges
+if/when updating the hashing scheme in the future. As such, VCCS borrows the
+idea to SHA-512 hash the input from OpenBSD bcrypt_pbkdf. This way, the input
+to bcrypt() is always 512 bits (64 bytes).
+
+
+  // Get rid of plaintext as soon as possible, to avoid leaking it (logs etc.)
+  T2 = BCRYPT(T1, bcrypt_salt)
+  H1 = remove_bcrypt_salt(T2)
 
 credential_id should be a unique identifier for this particular credential.
 An actual user might have many credentials associated with him/her. The
@@ -126,7 +146,7 @@ more iterations where deemed appropriate, such as with system administrator
 accounts.
 
 
-  local_salt = yhsm_hmac_sha1(T)
+  local_salt = YHSM_HMAC_SHA1(T)
 
 local_salt is the result of a keyed HMAC-SHA-1 calculation, done inside the
 YubiHSM. It is not computed until after the 'T2 = PBKDF2-HMAC-SHA512' above,
@@ -158,7 +178,7 @@ Key management
 ==============
 
 The HMAC keys used to derive the locally parameterized salt (in the dedicated
-hashing servers) from the YubiHSMs should not be used indefinately.
+hashing servers) from the YubiHSMs should not be used indefinitely.
 
 If local password retention policy mandates users to change password every
 three years, and key management policy limits key usage to credentials created
@@ -174,16 +194,6 @@ authentication key", saying that it should not be used on Originator systems
 (operation: password set) for more than two years, and not on Recipient
 systems (operation: password validation) for more than two+three years.
 
+---
 
-
-Possible improvements
-=====================
-OpenBSD recently added a new KDF based on bcrypt. They chose to SHA-512 hash
-the input password once before passing it to bcrypt in order to try and reap
-some benefit of a password longer than the bcrypt key size (72 bytes IIRC).
-
-http://www.openbsd.org/cgi-bin/cvsweb/~checkout~/src/lib/libutil/bcrypt_pbkdf.c
-
-VCCS should perhaps do the same, to get the same benefit and also remove the
-counterintuitive limitation of max 72 character passwords. There are password
-managers that default to 100 character passwords.
+Fredrik Thulin <fredrik@thulin.net>, 2013-06-25

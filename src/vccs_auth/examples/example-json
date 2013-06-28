@@ -13,6 +13,7 @@
 import sys
 import json
 import bcrypt
+from hashlib import sha512
 
 auth = True
 
@@ -23,13 +24,25 @@ if len(sys.argv) == 2:
         sys.stderr.write("Unknown command {!r}\n".format(sys.argv[1]))
         sys.exit(1)
 
+credential_id = '4711'
 bcrypt_salt = '$2a$08$Ahy51oCM6Vg6d.1ScOPxse'
-bcrypt_plaintext = 'plaintext'
-bcrypt_hashed = bcrypt.hashpw(bcrypt_plaintext, bcrypt_salt)
+plaintext = 'plaintext'
+# Collapse password. This avoids the bcrypt limitation of only using the
+# first 72 characters of the password. Idea borrowed from OpenBSD bcrypt_pbkdf().
+T = "{!s}{!s}{!s}{!s}".format(len(credential_id), credential_id, len(plaintext), plaintext)
+sha_digest = sha512(T).digest()
+sys.stderr.write("       Collapsed : {!r}\n".format(sha_digest.encode('hex')))
+bcrypt_hashed = bcrypt.hashpw(sha_digest, bcrypt_salt)
 # withhold bcrypt salt from authentication backends
 H1 = bcrypt_hashed[len(bcrypt_salt):]
 
 sys.stderr.write("Full bcrypt hash : {!r}\n".format(bcrypt_hashed))
+sys.stderr.write("   Credential id : {!r}\n".format(credential_id))
+sys.stderr.write("       Plaintext : {!r}\n".format(plaintext))
+sys.stderr.write("       Formatted : {!r}\n".format(T))
+sys.stderr.write("       Collapsed : {!r}\n".format(sha_digest.encode('hex')))
+sys.stderr.write("            Salt : {!r}\n".format(bcrypt_salt))
+sys.stderr.write("              H1 : {!r}\n".format(H1))
 
 action = 'auth'
 if not auth:
@@ -41,7 +54,7 @@ a = {action:
           'factors': [
             {'type': 'password',
              'H1': H1,
-             'credential_id': 4711,
+             'credential_id': credential_id,
              }
             ]
           }
