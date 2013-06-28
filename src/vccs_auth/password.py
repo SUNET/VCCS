@@ -120,6 +120,11 @@ class VCCSPasswordFactor(VCCSFactor):
         """
         H2 = self._calculate_cred_hash(hasher, kdf)
         self._audit_log(logger, H2, self.cred)
+        # XXX need to log successful login in credential_store to be able to ban
+        # accounts after a certain time of inactivity (Kantara AL2_CM_CSM#050)
+        # XXX can as well log counter of invalid attempts per credential too -
+        # so that credentials that have had a total of too many failed logins
+        # can be blocked based on that
         return (H2.encode('hex') == self.cred.derived_key())
 
     def add_credential(self, hasher, kdf, logger):

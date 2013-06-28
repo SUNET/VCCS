@@ -59,3 +59,7 @@ number for any specific hardware and software setup.
 
 Audit logs will be sent to syslog, most probably using UDP datagrams. Enable
 remote reception accordingly.
+
+
+# XXX how are OATH credentials protected from copy-paste to another credential?
+maybe just by backend checking if user_id matches one stored with the credential

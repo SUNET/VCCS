@@ -98,8 +98,10 @@ class BaseRequest():
         except Exception:
             logger.error("Failed parsing JSON body :\n{!r}\n-----\n".format(json), traceback=True)
             raise VCCSAuthenticationError("Failed parsing request")
+        # XXX no check if top_node in body
         req = body[top_node]
 
+        # XXX is it really body["version"] we want to check in BaseRequest()?
         if req.get('version', 1) is not 1:
             # really handle missing version below
             raise VCCSAuthenticationError("Unknown request version : {!r}".format(req['version']))
@@ -233,6 +235,8 @@ class VCCSLogger():
             syslog_h = logging.handlers.SysLogHandler()
             formatter = logging.Formatter('%(name)s: %(levelname)s %(message)s')
             syslog_h.setFormatter(formatter)
+            if debug:
+                syslog_h.setLevel(logging.DEBUG)
             self.logger.addHandler(syslog_h)
 
     def audit(self, data):
@@ -287,6 +291,8 @@ class AuthBackend(object):
     def authenticate(self, request=None):
         self.remote_ip = cherrypy.request.remote.ip
         result = False
+
+        # XXX should check remote IP against self.config.authenticate_allow, if that is set
 
         # Parse request
         top_node = 'auth'
@@ -496,7 +502,7 @@ def main(myname = 'vccs_authbackend'):
 
     # initialize various components
     config = vccs_auth.config.VCCSAuthConfig(args.config_file, args.debug)
-    logger = VCCSLogger(myname)
+    logger = VCCSLogger(myname, debug=config.debug)
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
@@ -515,6 +521,9 @@ def main(myname = 'vccs_authbackend'):
     else:
         sys.stderr.write("NOTE: Config option 'logdir' not set.\n")
     cherrypy.config.update(cherry_conf)
+
+    logger.logger.info("Starting server listening on {!s}:{!s} (loglevel {!r})".format(
+            config.listen_addr, config.listen_port, logger.logger.getEffectiveLevel()))
 
     cherrypy.quickstart(AuthBackend(hasher, kdf, logger, credstore, config))
 
