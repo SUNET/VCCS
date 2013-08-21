@@ -37,6 +37,7 @@ Store VCCSAuthCredential objects in database.
 """
 
 import pymongo
+import bson
 
 import vccs_auth.credential
 from vccs_auth.credential import VCCSAuthCredential
@@ -141,7 +142,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         Add a new credential to the MongoDB collection.
 
         :param cred: VCCSAuthCredential object
-        :returns: Result of MongoDB insert()
+        :returns: True on success, False or result of MongoDB insert()
         """
         if not isinstance(cred, VCCSAuthCredential):
             raise TypeError("non-VCCSAuthCredential cred")
@@ -149,7 +150,10 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
                 'credential': cred.to_dict(),
                 }
         try:
-            return self.credentials.insert(docu)
+            res = self.credentials.insert(docu)
+            if isinstance(res, bson.ObjectId):
+                return True
+            return res
         except pymongo.errors.DuplicateKeyError:
             return False
 
@@ -160,7 +164,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         Ensures atomic update using an increasing 'revision' attribute.
 
         :param cred: VCCSAuthCredential object
-        :returns: Result of MongoDB update()
+        :returns: True on success, False or result of MongoDB update()
         """
         if not isinstance(cred, VCCSAuthCredential):
             raise TypeError("non-VCCSAuthCredential cred")
@@ -171,4 +175,5 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         data = {'revision': metadata['revision'] + 1,
                 'credential': cred.to_dict(),
                 }
+        # XXX this function should return True on success
         return self.credentials.update(spec, {'$set': data}, safe=safe)
