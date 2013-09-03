@@ -520,6 +520,8 @@ def main(myname = 'vccs_authbackend'):
         cherry_conf['log.error_file'] = os.path.join(config.logdir, 'error.log')
     else:
         sys.stderr.write("NOTE: Config option 'logdir' not set.\n")
+        cherry_conf['log.screen'] = True
+
     cherrypy.config.update(cherry_conf)
 
     logger.logger.info("Starting server listening on {!s}:{!s} (loglevel {!r})".format(
