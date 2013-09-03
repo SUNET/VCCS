@@ -12,19 +12,16 @@ implemented.
 Authentication
 ==============
 
-Pseudo-code describing the authentication process :
+Pseudo-code describing the authentication process ('|' denotes concatenation) :
 
   On frontend (SAML IdP, RADIUS server etc, see python-vccs_client) :
   -------------------------------------------------------------------
 
-  credential_id, bcrypt_salt = load_from_userdb(user_id)
-
-  // Collapse password, to make use of > 72 chars (bcrypt key size)
-  T1 = SHA512(credential_id | plaintext_password)
+  credential_id, salt, parameters = load_from_userdb(user_id)
+  T1 = (credential_id | plaintext_password)
 
   // Get rid of plaintext as soon as possible, to avoid leaking it (logs etc.)
-  T2 = BCRYPT(T1, bcrypt_salt)
-  H1 = remove_bcrypt_salt(T2)
+  H1 = BCRYPT_PBKDF(T1, salt, parameters)
   send_to_backend(H1, user_id, credential_id)
 
 

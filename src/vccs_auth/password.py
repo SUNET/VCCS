@@ -53,10 +53,22 @@ class VCCSPasswordFactor(VCCSFactor):
         self.config = config
         self.credstore = credstore
 
-        if len(self._H1) != 31:
-            # A full bcrypt is 60 chars. the frontend should NOT send the whole
-            # bcrypt digest to the authentication backend. bcrypt - salt = 31.
+        if self._H1.startswith('$'):
+            # If the frontend uses bcrypt() to generate H1, it should NOT send the whole
+            # bcrypt digest to the authentication backend. The salt is better kept separate
+            # in the frontend.
             raise VCCSAuthenticationError("Bad H1: {!r}".format(self._H1))
+
+        if len(self._H1) < 31:
+            # Ensure a minimum length.
+            raise VCCSAuthenticationError("Bad H1: {!r}".format(self._H1))
+
+        try:
+            # see if H1 is hex encoded, otherwise leave unaltered
+            _decoded = self._H1.decode('hex')
+            self._H1 = _decoded
+        except Exception:
+            pass
 
         if action == 'auth':
             _cred_id = str(req['credential_id'])
