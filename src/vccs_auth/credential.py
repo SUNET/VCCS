@@ -102,7 +102,7 @@ class VCCSAuthCredential():
         """
         val = self._data.get('revocation_info')
         if new is not None:
-            if val != None:
+            if val is not None:
                 # Once revocation_info is set, it should not be modified. In VCCS, you
                 # add new credentials rather than resurrect old ones.
                 raise ValueError("Refusing to modify revocation_info of credential")

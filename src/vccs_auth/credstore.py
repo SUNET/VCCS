@@ -42,7 +42,13 @@ import bson
 import vccs_auth.credential
 from vccs_auth.credential import VCCSAuthCredential
 
+
 class VCCSAuthCredentialStore():
+
+    """
+    Class providing access to the VCCS authentication backend private
+    credential store.
+    """
 
     def __init__(self):
         pass
@@ -55,6 +61,7 @@ class VCCSAuthCredentialStore():
         revoked credential.
 
         :param credential_id: unique identifier as string
+        :param check_active: If True, do not return revoked credentials
         :returns: VCCSAuthCredential object
         """
         raise NotImplementedError("Subclass should implement get_credential")
@@ -91,7 +98,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
      }
     """
 
-    def __init__(self, uri, logger, conn=None, collection="vccs_auth_credstore", **kwargs):
+    def __init__(self, uri, logger, conn=None, db_name="vccs_auth_credstore", **kwargs):
         VCCSAuthCredentialStore.__init__(self)
         if conn is not None:
             self.connection = conn
@@ -100,7 +107,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
                 self.connection = pymongo.mongo_replica_set_client.MongoReplicaSetClient(uri, **kwargs)
             else:
                 self.connection = pymongo.MongoClient(uri, **kwargs)
-        self.db = self.connection[collection]
+        self.db = self.connection[db_name]
         self.credentials = self.db.credentials
         for this in xrange(2):
             try:
@@ -164,6 +171,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
         Ensures atomic update using an increasing 'revision' attribute.
 
         :param cred: VCCSAuthCredential object
+        :param safe: If True, block until write operation has completed
         :returns: True on success, False or result of MongoDB update()
         """
         if not isinstance(cred, VCCSAuthCredential):

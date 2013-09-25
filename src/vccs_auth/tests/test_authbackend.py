@@ -38,13 +38,10 @@ Test the VCCS authbackend.
 """
 
 import os
-import sys
 import time
 import bcrypt
-import unittest
 import pkg_resources
 import simplejson as json
-from pprint import pprint, pformat
 
 import vccs_auth
 from vccs_auth.vccs_authbackend import AuthBackend, VCCSLogger
@@ -60,7 +57,6 @@ from common import FakeCredentialStore
 
 
 class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
-
     def setUp(self):
         debug = False
         datadir = pkg_resources.resource_filename(__name__, 'data')
@@ -72,12 +68,12 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                      0x2001: str('2001' * 16).decode('hex'),
                      }
         self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
-        self.logger = VCCSLogger('test_authbackend', syslog=False)
+        self.logger = VCCSLogger('test_authbackend', syslog = False)
 
         #cherrypy.root = AuthBackend(self.hasher, self.kdf, self.logger, self.credstore, self.config)
 
         self.authbackend = AuthBackend(self.hasher, self.kdf, self.logger, self.credstore,
-                                       self.config, expose_real_errors=True)
+                                       self.config, expose_real_errors = True)
         cherrypy.tree.mount(self.authbackend, '/')
         cherrypy.engine.start()
 
@@ -101,25 +97,24 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         Verify bad requests are rejected (right URL, no param)
         """
-        response = self.request('/authenticate', return_error=True)
+        response = self.request('/authenticate', return_error = True)
         self.assertIn('Failed parsing request', response.body[0])
 
     def test_auth_request_wrong_version(self):
         """
         Verify auth request with wrong version is rejected
         """
-        a = {'auth':
-                 {'version': 9999,
-                  'user_id': 'ft@example.net',
-                  }
+        a = {'auth': {'version': 9999,
+                      'user_id': 'ft@example.net',
+                      },
              }
         j = json.dumps(a)
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         self.assertIn('Unknown request version : 9999', response.body[0])
 
         # try again with blinding
         self.authbackend.expose_real_errors = False
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         self.assertEqual(response.output_status, '500 Internal Server Error')
 
     def test_auth_missing_data(self):
@@ -127,68 +122,59 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Verify auth request with missing data is rejected
         """
         for req_field in ['version', 'user_id', 'factors']:
-            a = {'auth':
-                     {'version': 1,
-                      'user_id': 'ft@example.net',
-                      'factors': [],
-                      }
+            a = {'auth': {'version': 1,
+                          'user_id': 'ft@example.net',
+                          'factors': [],
+                          },
                  }
             del a['auth'][req_field]
             j = json.dumps(a)
-            response = self.request('/authenticate', request=j, return_error=True)
+            response = self.request('/authenticate', request = j, return_error = True)
             self.assertIn("No '{!s}' in request".format(req_field), response.body[0])
-
 
     def test_auth_request1(self):
         """
         Verify correct authentication request
         """
         H1 = self._bcrypt_hash('plaintext')
-        a = {'auth':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': '4711',
-                     }
-                    ]
-                  }
+        a = {'auth': {'version': 1,
+                      'user_id': 'ft@example.net',
+                      'factors': [
+                          {'type': 'password',
+                           'H1': H1,
+                           'credential_id': '4711',
+                           }],
+                      },
              }
         j = json.dumps(a)
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         res = json.loads(response.body[0])
-        expected = {'auth_response':
-                        {'version': 1,
-                         'authenticated': True,
-                         }
+        expected = {'auth_response': {'version': 1,
+                                      'authenticated': True,
+                                      },
                     }
         self.assertEqual(res, expected)
-
 
     def test_auth_request2(self):
         """
         Verify correct authenticate request with incorrect password
         """
         H1 = self._bcrypt_hash('textplain')
-        a = {'auth':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': '4711',
-                     }
-                    ]
-                  }
+        a = {'auth': {'version': 1,
+                      'user_id': 'ft@example.net',
+                      'factors': [
+                          {'type': 'password',
+                           'H1': H1,
+                           'credential_id': '4711',
+                           }]
+                      },
              }
         j = json.dumps(a)
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         res = json.loads(response.body[0])
-        expected = {'auth_response':
-                        {'version': 1,
-                         'authenticated': False,
-                         }
+        expected = {'auth_response': {'version': 1,
+                                      'authenticated': False,
+                                      },
                     }
         self.assertEqual(res, expected)
 
@@ -196,15 +182,12 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         Verify authenticate request without credentials
         """
-        H1 = self._bcrypt_hash('plaintext')
-        a = {'auth':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': []
-                  }
+        a = {'auth': {'version': 1, 'user_id': 'ft@example.net',
+                      'factors': [],
+                      },
              }
         j = json.dumps(a)
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '501 Not Implemented')
         self.assertEqual(response.body, [])
@@ -213,21 +196,19 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         Verify authenticate request with imaginary credential type
         """
-        a = {'auth':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [{'type': 'promise'}]
-                  }
+        a = {'auth': {'version': 1,
+                      'user_id': 'ft@example.net',
+                      'factors': [{'type': 'promise'}],
+                      },
              }
         j = json.dumps(a)
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '200 OK')
         res = json.loads(response.body[0])
-        expected = {'auth_response':
-                        {'version': 1,
-                         'authenticated': False,
-                         }
+        expected = {'auth_response': {'version': 1,
+                                      'authenticated': False,
+                                      },
                     }
         self.assertEqual(res, expected)
 
@@ -237,19 +218,17 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         H1 = self._bcrypt_hash('plaintext')
         cred_id = '9898'
-        a = {'auth':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': cred_id,
-                     }
-                    ]
-                  }
+        a = {'auth': {'version': 1,
+                      'user_id': 'ft@example.net',
+                      'factors': [
+                          {'type': 'password',
+                           'H1': H1,
+                           'credential_id': cred_id,
+                           }],
+                      },
              }
         j = json.dumps(a)
-        response = self.request('/authenticate', request=j, return_error=True)
+        response = self.request('/authenticate', request = j, return_error = True)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '500 Internal Server Error')
         self.assertIn('Unknown credential: {!r}'.format(cred_id), response.body[0])
@@ -261,30 +240,27 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         H1 = self._bcrypt_hash('foobar')
         cred_id = '4720'
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': cred_id,
-                     }
-                    ]
-                  }
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [
+                               {'type': 'password',
+                                'H1': H1,
+                                'credential_id': cred_id,
+                                }],
+                           },
              }
         j = json.dumps(a)
 
         # make sure credential does not exist in credstore
         self.assertIsNone(self.credstore.get_credential(cred_id))
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         res = json.loads(response.body[0])
-        expected = {'add_creds_response':
-                        {'version': 1,
-                         'success': True,
-                         }
+        expected = {'add_creds_response': {'version': 1,
+                                           'success': True,
+                                           },
                     }
         self.assertEqual(res, expected)
 
@@ -293,7 +269,6 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         self.assertEqual(cred.id(), cred_id)
         self.assertEqual(cred.status(), 'active')
         self.assertGreater(cred.iterations(), 20000)
-
 
     def test_add_creds_request2(self):
         """
@@ -306,31 +281,27 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         aead = pyhsm.soft_hsm.aesCCM(self.keys[key_handle], key_handle, nonce,
                                      test_key + flags, decrypt = False)
         cred_id = '4740'
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'aead': aead.encode('hex'),
-                     'credential_id': cred_id,
-                     'digits': 6,
-                     'nonce': nonce.encode('hex'),
-                     'key_handle': key_handle,
-                     'oath_counter': 0,
-                     'type': 'oath-hotp',
-                     },
-                    ]
-                  }
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [{'aead': aead.encode('hex'),
+                                       'credential_id': cred_id,
+                                       'digits': 6,
+                                       'nonce': nonce.encode('hex'),
+                                       'key_handle': key_handle,
+                                       'oath_counter': 0,
+                                       'type': 'oath-hotp',
+                                      }],
+                           }
              }
         j = json.dumps(a)
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         res = json.loads(response.body[0])
-        expected = {'add_creds_response':
-                        {'version': 1,
-                         'success': True,
-                         }
+        expected = {'add_creds_response': {'version': 1,
+                                           'success': True,
+                                           }
                     }
         self.assertEqual(res, expected)
 
@@ -343,16 +314,15 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         Verify add_credentials from wrong source IP
         """
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [],
-                  },
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [],
+                           },
              }
         j = json.dumps(a)
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.128.129.130:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.128.129.130:50001',
+                                request = j)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '403 Forbidden')
 
@@ -371,21 +341,20 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                  {'version': 1,
                   'user_id': 'ft@example.net',
                   'factors': [
-                    {'aead': aead.encode('hex'),
-                     'credential_id': cred_id,
-                     'digits': 6,
-                     'nonce': nonce.encode('hex'),
-                     'key_handle': key_handle + 55,
-                     'oath_counter': 0,
-                     'type': 'oath-hotp',
-                     },
-                    ]
-                  }
+                      {'aead': aead.encode('hex'),
+                       'credential_id': cred_id,
+                       'digits': 6,
+                       'nonce': nonce.encode('hex'),
+                       'key_handle': key_handle + 55,
+                       'oath_counter': 0,
+                       'type': 'oath-hotp',
+                      }],
+                  },
              }
         j = json.dumps(a)
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
         self.assertIn('Add OATH credentials key_handle {} not in allowed list'.format(key_handle + 55),
                       response.body[0])
@@ -399,25 +368,23 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         nonce = '010203040506'.decode('hex')
         aead = ('aa' * 32).decode('hex')
         cred_id = '4740'
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'aead': aead.encode('hex'),
-                     'credential_id': cred_id,
-                     'digits': 6,
-                     'nonce': nonce.encode('hex'),
-                     'key_handle': key_handle,
-                     'oath_counter': 0,
-                     'type': 'oath-hotp',
-                     },
-                    ]
-                  }
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [{'aead': aead.encode('hex'),
+                                        'credential_id': cred_id,
+                                        'digits': 6,
+                                        'nonce': nonce.encode('hex'),
+                                        'key_handle': key_handle,
+                                        'oath_counter': 0,
+                                        'type': 'oath-hotp',
+                                        },
+                                       ],
+                           },
              }
         j = json.dumps(a)
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
         self.assertIn('AEAD integrity check failed', response.body[0])
         self.assertEqual(response.output_status, '500 Internal Server Error')
@@ -431,25 +398,23 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         H1 = self._bcrypt_hash('foobar')
         cred_id = '4750'
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': cred_id,
-                     },
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': 'some-other-string',
-                     }
-                    ]
-                  }
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [{'type': 'password',
+                                        'H1': H1,
+                                        'credential_id': cred_id,
+                                        },
+                                       {'type': 'password',
+                                        'H1': H1,
+                                       'credential_id': 'some-other-string',
+                                        },
+                                       ],
+                           },
              }
         j = json.dumps(a)
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '501 Not Implemented')
 
@@ -459,29 +424,27 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         H1 = self._bcrypt_hash('foobar')
         cred_id = '4711'
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': cred_id,
-                     }
-                    ]
-                  }
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [{'type': 'password',
+                                        'H1': H1,
+                                        'credential_id': cred_id,
+                                        },
+                                       ],
+                           },
              }
         j = json.dumps(a)
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
         self.assertIn('Test already have credential with id {!r}'.format(cred_id), response.body[0])
         self.assertEqual(response.output_status, '500 Internal Server Error')
 
         # try again with blinding
         self.authbackend.expose_real_errors = False
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE2 {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '500 Internal Server Error')
         self.assertEqual(response.body, [])
@@ -493,29 +456,26 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         H1 = self._bcrypt_hash('foobar')
         cred_id = '4721'
-        a = {'add_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'type': 'password',
-                     'H1': H1,
-                     'credential_id': cred_id,
-                     }
-                    ]
-                  }
+        a = {'add_creds': {'version': 1,
+                           'user_id': 'ft@example.net',
+                           'factors': [{'type': 'password',
+                                        'H1': H1,
+                                        'credential_id': cred_id,
+                                        },
+                                       ],
+                           },
              }
         j = json.dumps(a)
 
         # make sure credential does not exist in credstore
         self.assertIsNone(self.credstore.get_credential(cred_id))
 
-        response = self.request('/add_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/add_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         res = json.loads(response.body[0])
-        expected = {'add_creds_response':
-                        {'version': 1,
-                         'success': True,
-                         }
+        expected = {'add_creds_response': {'version': 1,
+                                           'success': True,
+                                           }
                     }
         self.assertEqual(res, expected)
 
@@ -524,38 +484,35 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         self.assertEqual(cred.status(), 'active')
 
         # Now, revoke the credential we added
-        a = {'revoke_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'reason': 'Just testing',
-                     'reference': '',
-                     'credential_id': cred_id,
-                     }
-                    ]
-                  }
+        a = {'revoke_creds': {'version': 1,
+                              'user_id': 'ft@example.net',
+                              'factors': [{'reason': 'Just testing',
+                                           'reference': '',
+                                           'credential_id': cred_id,
+                                           },
+                                          ],
+                              }
              }
         j = json.dumps(a)
-        response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/revoke_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         res = json.loads(response.body[0])
-        expected = {'revoke_creds_response':
-                        {'version': 1,
-                         'success': True,
-                         }
+        expected = {'revoke_creds_response': {'version': 1,
+                                              'success': True,
+                                              },
                     }
         self.assertEqual(res, expected)
 
-        revoked = self.credstore.get_credential(cred_id, check_revoked=False)
+        revoked = self.credstore.get_credential(cred_id, check_revoked = False)
         print "REVOKED CRED {!r}".format(revoked)
         self.assertEqual(revoked.status(), 'revoked')
         got_info = revoked.revocation_info()
         print "REVOCATION INFO: {!r}".format(got_info)
-        expected_info = {'timestamp': got_info.get('timestamp'),  # copy since it is a timestamp
+        expected_info = {'timestamp': got_info.get('timestamp'), # copy since it is a timestamp
                          'client_ip': '127.0.0.127',
                          'reason': 'Just testing',
                          'reference': '',
-                         }
+        }
         self.assertEqual(revoked.revocation_info(), expected_info)
         # check the timestamp
         now = int(time.time())
@@ -572,29 +529,27 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         """
         H1 = self._bcrypt_hash('foobar')
         cred_id = u'0'
-        a = {'revoke_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [
-                    {'reason': 'Just testing',
-                     'reference': '',
-                     'credential_id': cred_id,
-                     }
-                    ]
-                  }
+        a = {'revoke_creds': {'version': 1,
+                              'user_id': 'ft@example.net',
+                              'factors': [{'reason': 'Just testing',
+                                           'reference': '',
+                                           'credential_id': cred_id,
+                                           },
+                                          ],
+                              },
              }
         j = json.dumps(a)
 
-        response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/revoke_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE1 {!r}: {!r}".format(response.status, response.body)
         self.assertIn('Unknown credential: {!r}'.format(cred_id), response.body[0])
         self.assertEqual(response.output_status, '500 Internal Server Error')
 
         # try again with blinding
         self.authbackend.expose_real_errors = False
-        response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                request=j)
+        response = self.request('/revoke_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                request = j)
         print "RESPONSE2 {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '500 Internal Server Error')
         self.assertEqual(response.body, [])
@@ -604,36 +559,33 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
         Verify revoke request with missing data is rejected
         """
         for req_field in ['credential_id', 'reason', 'reference']:
-            a = {'revoke_creds':
-                     {'version': 1,
-                      'user_id': 'ft@example.net',
-                      'factors': [
-                        {'reason': 'Just testing',
-                         'reference': '',
-                         'credential_id': 4750,
-                         }
-                        ]
-                      }
+            a = {'revoke_creds': {'version': 1,
+                                  'user_id': 'ft@example.net',
+                                  'factors': [{'reason': 'Just testing',
+                                               'reference': '',
+                                               'credential_id': 4750,
+                                               },
+                                              ],
+                                  },
                  }
             del a['revoke_creds']['factors'][0][req_field]
             j = json.dumps(a)
-            response = self.request('/revoke_creds', return_error=True, remote_hp='127.0.0.127:50001',
-                                    request=j)
+            response = self.request('/revoke_creds', return_error = True, remote_hp = '127.0.0.127:50001',
+                                    request = j)
             self.assertIn("No '{!s}' in credential to revoke".format(req_field), response.body[0])
 
     def test_revoke_creds_request3(self):
         """
         Verify revoke_creds from wrong source IP
         """
-        a = {'revoke_creds':
-                 {'version': 1,
-                  'user_id': 'ft@example.net',
-                  'factors': [],
-                  },
+        a = {'revoke_creds': {'version': 1,
+                              'user_id': 'ft@example.net',
+                              'factors': [],
+                              },
              }
         j = json.dumps(a)
 
-        response = self.request('/revoke_creds', return_error=True, remote_hp='127.128.129.130:50001',
-                                request=j)
+        response = self.request('/revoke_creds', return_error = True, remote_hp = '127.128.129.130:50001',
+                                request = j)
         print "RESPONSE {!r}: {!r}".format(response.status, response.body)
         self.assertEqual(response.output_status, '403 Forbidden')

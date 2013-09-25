@@ -1,16 +1,17 @@
 #!/usr/bin/python
-#
-# Produce example OATH JSON to be POSTed to authbackend
-#
-#
-# HSM> keyload
-# 00002001,2001200120012001200120012001200120012001200120012001200120012001
-# HSM> keycommit
-#
-# $ ./example-oath-json | curl --data-urlencode request@- -v localhost:8080/authenticate
-#
 
-import os
+"""
+
+ Produce example OATH JSON to be POSTed to authbackend
+
+
+ HSM> keyload
+ 00002001,2001200120012001200120012001200120012001200120012001200120012001
+ HSM> keycommit
+
+ $ ./example-oath-json | curl --data-urlencode request@- -v localhost:8080/authenticate
+"""
+
 import sys
 import hmac
 import json
@@ -33,34 +34,41 @@ if len(sys.argv) == 2:
         sys.stderr.write("Unknown command {!r}\n".format(sys.argv[1]))
         sys.exit(1)
 
-def oath_code(hmac_key, counter, length=6):
+
+def oath_code(hmac_key, counter, length = 6):
+    """
+    Calculate the OATH key for a given hmac_key and counter value.
+    :param hmac_key: string
+    :param counter: integer
+    :param length: Number of digits in code, 6 or 8
+    :return: OATH code as string
+    """
     counter = struct.pack("> Q", counter)
-    hmac_result = hmac.new(nist_test_key, counter, hashlib.sha1).digest()
-    code = pyhsm.oath_hotp.truncate(hmac_result, length=length)
-    fmt = "%%.%ii" % (length)  # leading zero padding
-    code_str = fmt % (code)
+    hmac_result = hmac.new(hmac_key, counter, hashlib.sha1).digest()
+    code = pyhsm.oath_hotp.truncate(hmac_result, length = length)
+    fmt = "%%.%ii" % length  # leading zero padding
+    code_str = fmt.format(code)
     return code_str
+
 
 action = 'auth'
 if not auth:
     action = 'add_creds'
 
-a = {action:
-         {'version': 1,
-          'user_id': 'ft@nordu.net',
-          'factors': [
-            {'type': 'oath-totp',
-             'credential_id': 4712,
-             }
-            ]
-          }
+a = {action: {'version': 1,
+              'user_id': 'ft@nordu.net',
+              'factors': [
+                  {'type': 'oath-totp',
+                   'credential_id': 4712,
+                   }],
+              },
      }
 
 totp_counter = int(time.time()) / 30
 
 if auth:
     # Now, calculate an OATH code for the current time
-    code_str = oath_code(nist_test_key, totp_counter, length=digits)
+    code_str = oath_code(nist_test_key, totp_counter, length = digits)
 
     sys.stderr.write("OATH-TOTP code : %s (for counter=%i)\n" % (code_str, totp_counter))
     a[action]['factors'][0]['user_code'] = code_str
@@ -70,6 +78,6 @@ else:
     a[action]['factors'][0]['digits'] = digits
     a[action]['factors'][0]['oath_counter'] = totp_counter
 
-print json.dumps(a, sort_keys=True, indent=4)
+print json.dumps(a, sort_keys = True, indent = 4)
 
 sys.stderr.write("\nCan't test HOTP since we can't know what counter to use\n")

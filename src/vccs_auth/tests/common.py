@@ -38,31 +38,30 @@ Common code for VCCS tests.
 
 import vccs_auth
 
-class FakeCredentialStore():
 
-    def __init__(self, creds=None):
+class FakeCredentialStore():
+    def __init__(self, creds = None):
         if not creds:
-            creds = {'4711':
-                         {'status' : 'active',
-                          'derived_key' : '839bd4e7e3f5d06c460999a4fee460c8928a04eb19f52193d1d2fe8e0a3626ae'
-                                          'a1bf5eb9faa211673a25946a0d7f1c3ae6e0d62a31a5b1149b64e84dde41b619',
-                          'version' : 'NDNv1',
-                          'iterations' : 50000,
-                          'key_handle' : 0x2000,
-                          'salt' : '7e1d2271b58a779a5936a656218faedb',
-                          'kdf' : 'PBKDF2-HMAC-SHA512',
-                          'type' : 'password',
-                          'credential_id' : '4711',
-                          },
+            creds = {'4711': {'status': 'active',
+                              'derived_key': '839bd4e7e3f5d06c460999a4fee460c8928a04eb19f52193d1d2fe8e0a3626ae'
+                                             'a1bf5eb9faa211673a25946a0d7f1c3ae6e0d62a31a5b1149b64e84dde41b619',
+                              'version': 'NDNv1',
+                              'iterations': 50000,
+                              'key_handle': 0x2000,
+                              'salt': '7e1d2271b58a779a5936a656218faedb',
+                              'kdf': 'PBKDF2-HMAC-SHA512',
+                              'type': 'password',
+                              'credential_id': '4711',
+                              },
                      }
         self.creds = creds
 
-    def get_credential(self, cred_id, check_revoked=True):
+    def get_credential(self, cred_id, check_revoked = True):
         if not isinstance(cred_id, basestring):
             raise TypeError("non-string cred_id")
         if cred_id in self.creds:
             metadata = {}
-            return vccs_auth.credential.from_dict(self.creds[cred_id], metadata, check_revoked=check_revoked)
+            return vccs_auth.credential.from_dict(self.creds[cred_id], metadata, check_revoked = check_revoked)
         else:
             #raise ValueError('Test have no credential with id {!r}'.format(cred_id))
             return None
@@ -74,7 +73,7 @@ class FakeCredentialStore():
         self.creds[cred_id] = cred.to_dict()
         return True
 
-    def update_credential(self, cred, safe=True):
+    def update_credential(self, cred, safe = True):
         cred_id = cred.id()
         if cred_id not in self.creds:
             raise ValueError('Test does not have credential with id {!r}'.format(cred_id))

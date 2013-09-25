@@ -37,9 +37,9 @@
 Test (MongoDB-based) credential store. Requires a mongod on localhost.
 """
 
-import pymongo
+import sys
 import unittest
-from pprint import pprint, pformat
+from pprint import pformat
 
 import vccs_auth
 from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB as VCCS_MongoDB
@@ -61,15 +61,15 @@ class TestCredStore(unittest.TestCase):
             self.mdb = VCCS_MongoDB('127.0.0.1', 27017, self.logger, collection="TEST_vccs_auth_credstore_TEST")
         except:
             raise unittest.SkipTest("requires accessible MongoDB server on 127.0.0.1")
-        self.cred_data = {'type':          'password',
-                          'kdf':           'PBKDF2-HMAC-SHA512',
-                          'status':        'active',
-                          'version':       'NDNv1',
-                          'derived_key':   'aa' * (512 / 8),
-                          'key_handle':    0x2000,
-                          'iterations':    100,
+        self.cred_data = {'type': 'password',
+                          'kdf': 'PBKDF2-HMAC-SHA512',
+                          'status': 'active',
+                          'version': 'NDNv1',
+                          'derived_key': 'aa' * (512 / 8),
+                          'key_handle': 0x2000,
+                          'iterations': 100,
                           'credential_id': 4711,
-                          'salt':          '12345678901234567890123456789012',
+                          'salt': '12345678901234567890123456789012',
                           }
 
     def test_mdb_aaa_empty_collection(self):
