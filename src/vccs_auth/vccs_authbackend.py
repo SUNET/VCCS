@@ -230,7 +230,7 @@ class VCCSLogger():
         :params syslog: boolean, log to syslog or not?
         :params debug: boolean, controls log verbosity
         """
-        self.context = context
+        cherrypy.request.vccs_log_context = context
 
         self.logger = logging.getLogger(myname)
         if debug:
@@ -251,7 +251,7 @@ class VCCSLogger():
 
         :param data: Audit data as string
         """
-        self.logger.info("AUDIT: {context}, {data}".format(context = self.context, data = data))
+        self.logger.info("AUDIT: {context}, {data}".format(context = cherrypy.request.vccs_log_context, data = data))
 
     def error(self, msg, traceback=False):
         """
@@ -268,11 +268,10 @@ class VCCSLogger():
         Set data to be included in all future audit logs.
         :param context: dict with data to log with every line of logging
         """
-        # XXX this might not be thread safe! Must test if logging is mangled with
-        # concurrent authentication requests for different users/from different addresses.
-        # Potential solution would be to store context info in cherrypy request object instead,
-        # since documentation actually says it can be used like that.
-        self.context = ', '.join([k + '=' + v for (k, v) in context.items()])
+        # Add logging context to cherrypy.request (it is encouraged to do so, for request specific state)
+        # since there is only one VCCSLogger() instance for the whole application, and more than one
+        # thread serving requests.
+        cherrypy.request.vccs_log_context = ', '.join([k + '=' + v for (k, v) in context.items()])
 
 
 class AuthBackend(object):
