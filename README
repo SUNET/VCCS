@@ -69,20 +69,7 @@ Annotations for the hashing scheme
 
 Authentication client code (see separate project python-vccs_client) :
 
-  // Collapse password, to make use of > 72 chars (bcrypt key size)
-  T1 = SHA512(credential_id | plaintext_password)
-
-bcrypt key size is 72 characters. Any difference in the entered password after
-the first 72 characters is not reflected in the output. Having an upper length
-of passwords in VCCS is counterintuitive, and might introduce challenges
-if/when updating the hashing scheme in the future. As such, VCCS borrows the
-idea to SHA-512 hash the input from OpenBSD bcrypt_pbkdf. This way, the input
-to bcrypt() is always 512 bits (64 bytes).
-
-
-  // Get rid of plaintext as soon as possible, to avoid leaking it (logs etc.)
-  T2 = BCRYPT(T1, bcrypt_salt)
-  H1 = remove_bcrypt_salt(T2)
+  T1 = credential_id | plaintext_password
 
 credential_id should be a unique identifier for this particular credential.
 An actual user might have many credentials associated with him/her. The
@@ -92,19 +79,37 @@ an attacker controlling the user database from restoring old (cracked)
 credential information. The revocation status is stored in the trusted
 credential database only accessible to the backends.
 
+  // Get rid of plaintext as soon as possible, to avoid leaking it (logs etc.)
+  H1 = BCRYPT_PBKDF(T1, userdb_stored_salt)
+
 plaintext_password is the password entered in the IdP HTML login form, for
 example.
 
 userdb_stored_salt is the bcrypt salt in the current version. It is
-read from the user database, and should be removed from the bcrypt() output
-before it is sent to the backends. This way, an intruder on the backends
-will not get the full bcrypt hashes to mount a relatively unexpensive offline
-attack on. The intruder will lack information about the 128 bits bcrypt salt,
-so cannot feasibly attack the H1 hashes.
+read from the user database and should not be sent to the backends.
+This way, an intruder on the backends will not get the full bcrypt KDF hashes
+to mount a relatively unexpensive offline attack on. The intruder will lack
+information about the 128 bits (minimum) salt so cannot feasibly attack the H1
+hashes.
 
 The computation of H1 should be performed as soon as possible in the frontend
 code, to immediately get rid of the plaintext password - hopefully before
 it ends up in a debug log, swap file, core dump or similar.
+
+This pre-hashing step has evolved from standard bcrypt(), to bcrypt() with
+the salt removed from what is sent to the backends, to the new construct
+bcrypt_pbkdf().
+
+  (http://www.openbsd.org/cgi-bin/cvsweb/src/lib/libutil/bcrypt_pbkdf.c)
+
+The reason to remove the salt is to not give an attacker at the authentication
+backends the ability to record H1's for later offline attack. The reason for
+moving to the new (and therefor less proven) bcrypt_pbkdf() is to avoid the
+standard bcrypt() limitation of only 72 characters significant input -
+something highly unintuitively for a complicated credential system.
+
+bcrypt_pbkdf still works with standard cryptographic constructs although code
+immaturity and lack of independent implementations is a concern.
 
 
 Authentication backend code :
