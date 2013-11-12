@@ -60,8 +60,8 @@ class HsmKey():
 
     def __repr__(self):
         if self.flags == 0:
-            return '{s} (disabled)'.format(self.keyid)
-        return '{s} (age: {s} day(s), flags=0x{x}, usage={s})'.format(
+            return '{!s} (disabled)'.format(self.keyid)
+        return '{!s} (age: {!s} day(s), flags=0x{:x}, usage={!s})'.format(
             self.keyid, self.days_old(), self.flags, self.usage)
 
     def days_old(self):
@@ -153,7 +153,7 @@ class NDN_KeyDb():
         :raise: Exception() on duplicate key
         """
         if self.get_key(key.keyid):
-            raise Exception("Key '{s}' already in database".format(key.keyid))
+            raise Exception("Key '{!s}' already in database".format(key.keyid))
         self.keys.append(key)
 
     def get_key(self, keyid):

@@ -69,7 +69,7 @@ class HSM_Info():
         self.desc = desc
 
     def __repr__(self):
-        return '{s} ({s})'.format(self.id, self.desc)
+        return '{!s} ({!s})'.format(self.id, self.desc)
 
 
 def parse_args():
@@ -154,7 +154,7 @@ def prompt_for_hsm(args, logger, config):
             logger.info("Aborted by user")
             return None
         except Exception, e:
-            logger.critical("Failed initialising HSM : {s}".format(e))
+            logger.critical("Failed initialising HSM : {!s}".format(e))
         if not cfg:
             continue
         if cmd:
@@ -190,7 +190,9 @@ def init_hsm_config(cfg, args, logger):
 
     (send, expect,) = ('send', 'expect',)  # for color highlighting clarity below
     commands = [(send, ''), (expect, '^NO_CFG> .*'),
-                (send, 'hsm {x}'.format(flags)), (expect, 'Enabled flags 0x{x} = YSM_.*'.format(flags)),
+                # NOTE: YubiHSM 1.0.4 says 'Enabled flags 00030000 = ...', but it is possible that
+                # 0.9.8 said 0x30000. Dunno.
+                (send, 'hsm {:x}'.format(flags)), (expect, 'Enabled flags {:08x} = YSM_.*'.format(flags)),
                 (expect, 'Enter cfg password'), (send, cfg.cfg_password),
                 (expect, 'Enter admin Yubikey public id'), (send, ''),
                 (expect, 'Enter master key'), (send, cfg.master_key + ''),
@@ -205,7 +207,7 @@ def init_hsm_config(cfg, args, logger):
     cfg.hsm.interact(commands, retry_count = 50)
 
     logger.info("Previously unconfigured HSM initialized")
-    logger.info("NOTICE: Master key of HSM set to {s}".format(cfg.master_key))
+    logger.info("NOTICE: Master key of HSM set to {!s}".format(cfg.master_key))
     return True
 
 
@@ -218,7 +220,7 @@ def disable_old_keys(cfg, args, logger):
     for key in keys:
         age = key.days_old()
         if key.active and age > args.max_key_age:
-            logger.info("Disabling HsmKey {s} (older than {d} days/{.1f} years ({d}))".format(
+            logger.info("Disabling HsmKey {!s} (older than {:d} days/{:.1f} years ({:d}))".format(
                 key, args.max_key_age, args.max_key_age / 365.24, age))
             cfg.disable_key(key)
 
@@ -233,12 +235,12 @@ def get_new_keyhandle( args, kdb):
         suffix = 'da'  # halfway to ff if only using alphabetics
     while True:
         suggestion = '%i%i%i%s' % (now.year - 2000, now.month, now.day, suffix)  # oh no, a 2100 problem
-        keyid = raw_input("Enter new key handle (press enter for '{s}') : ".format(suggestion))
+        keyid = raw_input("Enter new key handle (press enter for '{!s}') : ".format(suggestion))
         if not keyid:
             keyid = suggestion
         if not kdb.get_key(keyid):
             return keyid
-        logger.info("Key '{s}' already exists in the key database.".format(keyid))
+        logger.info("Key '{!s}' already exists in the key database.".format(keyid))
 
 
 def generate_key(args, logger, cfg, kdb):
@@ -256,14 +258,14 @@ def generate_key(args, logger, cfg, kdb):
 
     # Generate the new key, using the RNG in the YubiHSM and the one on the server
     key = cfg.get_random(32).encode('hex')
-    flags = config['validator_{s}_key_flags'.format(args.key_usage)]
+    flags = config['validator_{!s}_key_flags'.format(args.key_usage)]
     if args.originator:
-        flags = config['originator_{s}_key_flags'.format(args.key_usage)]
+        flags = config['originator_{!s}_key_flags'.format(args.key_usage)]
     this = HsmKey(keyid, key, flags, args.key_usage)
     kdb.add_key(this)
 
     kdb.save(args.keydb_file)
-    logger.info("New key '{s}' added to key database.".format(keyid))
+    logger.info("New key '{!s}' added to key database.".format(keyid))
 
     return True
 
@@ -272,7 +274,7 @@ def install_keys(args, logger, cfg, kdb):
     # first check if we have all keys specified
     for keyid in args.install_keys:
         if not kdb.get_key(keyid):
-            logger.error("Key with id '{s}' not found in key database".format(keyid))
+            logger.error("Key with id '{!s}' not found in key database".format(keyid))
             logger.info("Keys in database :")
             for this in kdb.get_ids():
                 logger.info("  %s" % (kdb.get_key(this)))
@@ -286,7 +288,7 @@ def install_keys(args, logger, cfg, kdb):
     keylist = cfg.keylist()  # for debug message ordering
     logger.debug("Keys now in HSM :")
     for key in keylist:
-        logger.debug("  {s}".format(key))
+        logger.debug("  {!s}".format(key))
         if key.keyid in args.install_keys:
             logger.error("Key '{!s}' already present in HSM.".format(key.keyid))
             duplicate = True
@@ -297,11 +299,11 @@ def install_keys(args, logger, cfg, kdb):
 
     for keyid in args.install_keys:
         this = kdb.get_key(keyid)
-        flags = config['validator_{s}_key_flags'.format(args.key_usage)]
+        flags = config['validator_{!s}_key_flags'.format(args.key_usage)]
         if args.originator:
-            flags = config['originator_{s}_key_flags'.format(args.key_usage)]
+            flags = config['originator_{!s}_key_flags'.format(args.key_usage)]
         if flags != this.flags:
-            logger.debug("Using flags 0x{x} instead of 0x{x} on key".format(flags, this.flags))
+            logger.debug("Using flags 0x{:x} instead of 0x{:x} on key".format(flags, this.flags))
             this.flags = flags
         # we've already checked all keys exist in the database
         cfg.keyload(this)
@@ -309,7 +311,7 @@ def install_keys(args, logger, cfg, kdb):
     logger.info("")
     logger.info("Keys now in HSM :")
     for key in cfg.keylist():
-        logger.info("  {s}".format(key))
+        logger.info("  {!s}".format(key))
 
     cfg.keycommit()
 
@@ -340,7 +342,7 @@ def main(args, logger, config):
     except IOError, e:
         if e.errno == errno.ENOENT:
             # new db
-            logger.info("No previous database found in file '{s}'".format(args.keydb_file))
+            logger.info("No previous database found in file '{!s}'".format(args.keydb_file))
             pass
 
     if args.gen_key:

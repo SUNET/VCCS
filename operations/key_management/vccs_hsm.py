@@ -187,7 +187,7 @@ class HsmSerial():
                     else:
                         retry_count -= 1
                         if not retry_count:
-                            raise VCCSCfgInteractError('YubiHSM did not produce the expected data "{s}"'.format(arg),
+                            raise VCCSCfgInteractError('YubiHSM did not produce the expected data "{!s}"'.format(arg),
                                                        commands, data, arg, cmd_data, last_send,
                                                        )
                     for line in cmd_data.split('\n'):
@@ -387,7 +387,7 @@ class HsmConfigurator():
                 if not generate:
                     continue
                 self.logger.info("No key given, will generate one using HSM and OS random generators.")
-                return self.get_random(length).encode('hex')
+                return self.get_random(length)
             try:
                 data = data_str.decode('hex')
                 if length is not None:
