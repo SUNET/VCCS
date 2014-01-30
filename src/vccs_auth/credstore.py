@@ -114,16 +114,13 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
             try:
                 self.credentials.ensure_index('credential.credential_id', name='credential_id_idx', unique=True)
                 break
-            except pymongo.errors.AutoReconnect as exc:
+            except (pymongo.errors.AutoReconnect, bson.errors.InvalidDocument) as exc:
+                # InvalidDocument: When VCCS starts at the same time as MongoDB (e.g. on reboot),
+                # this error can be returned while MongoDB sorts out it's replica set status.
                 if this == (retries - 1):
+                    logger.error("Failed ensuring mongodb index, giving up after {!r} retries.".format(retries))
                     raise
-                logger.error("Failed ensuring mongodb index, retrying ({!r})".format(exc))
-            except bson.errors.InvalidDocument as exc:
-                # When VCCS starts at the same time as MongoDB (e.g. on reboot), this
-                # error can be returned while MongoDB sorts out it's replica set status
-                if this == (retries - 1):
-                    raise
-                logger.error("Failed ensuring mongodb index, retrying ({!r})".format(exc))
+                logger.debug("Failed ensuring mongodb index, retrying ({!r})".format(exc))
             time.sleep(1)
 
     def get_credential(self, credential_id, check_revoked=True):
