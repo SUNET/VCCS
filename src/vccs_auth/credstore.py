@@ -38,6 +38,7 @@ Store VCCSAuthCredential objects in database.
 
 import pymongo
 import bson
+import time
 
 import vccs_auth.credential
 from vccs_auth.credential import VCCSAuthCredential
@@ -109,14 +110,22 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
                 self.connection = pymongo.MongoClient(uri, **kwargs)
         self.db = self.connection[db_name]
         self.credentials = self.db.credentials
-        for this in xrange(2):
+        retries = 5
+        for this in xrange(retries):
             try:
                 self.credentials.ensure_index('credential.credential_id', name='credential_id_idx', unique=True)
                 break
-            except pymongo.errors.AutoReconnect, e:
-                if this == 1:
+            except pymongo.errors.AutoReconnect as exc:
+                if this == (retries - 1):
                     raise
-                logger.error("Failed ensuring mongodb index, retrying ({!r})".format(e))
+                logger.error("Failed ensuring mongodb index, retrying ({!r})".format(exc))
+            except bson.errors.InvalidDocument as exc:
+                # When VCCS starts at the same time as MongoDB (e.g. on reboot), this
+                # error can be returned while MongoDB sorts out it's replica set status
+                if this == (retries - 1):
+                    raise
+                logger.error("Failed ensuring mongodb index, retrying ({!r})".format(exc))
+            time.sleep(1)
 
     def get_credential(self, credential_id, check_revoked=True):
         """
