@@ -99,7 +99,7 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
      }
     """
 
-    def __init__(self, uri, logger, conn=None, db_name="vccs_auth_credstore", **kwargs):
+    def __init__(self, uri, logger, conn=None, db_name="vccs_auth_credstore", retries=10, **kwargs):
         VCCSAuthCredentialStore.__init__(self)
         if conn is not None:
             self.connection = conn
@@ -110,7 +110,6 @@ class VCCSAuthCredentialStoreMongoDB(VCCSAuthCredentialStore):
                 self.connection = pymongo.MongoClient(uri, **kwargs)
         self.db = self.connection[db_name]
         self.credentials = self.db.credentials
-        retries = 5
         for this in xrange(retries):
             try:
                 self.credentials.ensure_index('credential.credential_id', name='credential_id_idx', unique=True)
