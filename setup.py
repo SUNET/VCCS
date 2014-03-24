@@ -7,7 +7,7 @@ from distutils import versionpredicate
 here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README')).read()
 
-version = '0.1dev'
+version = '0.9.0'
 
 install_requires = [
     'pyhsm >= 1.0.3',
@@ -17,6 +17,12 @@ install_requires = [
     'simplejson >= 2.6.2',
     'pyserial >= 2.6',
     'pymongo >= 2.4.2',
+]
+
+testing_extras = [
+    'nose==1.2.1',
+    'coverage==3.6',
+    'py-bcrypt == 0.4',
 ]
 
 setup(name='vccs_auth',
@@ -36,6 +42,9 @@ setup(name='vccs_auth',
       #package_data = { },
       zip_safe=False,
       install_requires=install_requires,
+      extras_require={
+          'testing': testing_extras,
+      },
       entry_points={
         'console_scripts': ['vccs_authbackend=vccs_auth.vccs_authbackend:main',
                             ]
