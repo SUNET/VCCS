@@ -125,7 +125,11 @@ user_id is a unique identifier for this user. It might be a username, an
 e-mail address, a UUID or some other type of persistent identifier of a specific
 user. It is included in the computations on the backends to prevent an
 attacker that can modify the user database to re-associate a (known) credential
-with another user to gain access to that other users account.
+with another user to gain access to that other users account. This might or
+might not be effective, based on properties of the frontends and userdb. If an
+attacker can write to the userdb, he can probably reassociate a credential as
+well as this user_id to another user, in order to get (at least short term)
+access to that other user account.
 
 credential_id is the unique identifier of this particular credential. In the
 current implementation, this is simply an integer.
