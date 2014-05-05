@@ -46,7 +46,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'num_threads': '8',
                     'nettle_path': '',
                     'logdir': None,
-                    'syslog_socket': '/var/log/syslog',
+                    'syslog_socket': None,
                     'mongodb_uri': '127.0.0.1',
                     'add_creds_allow': '', # comma-separated list of IP addresses
                     'revoke_creds_allow': '', # comma-separated list of IP addresses
