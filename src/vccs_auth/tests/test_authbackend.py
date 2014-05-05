@@ -68,7 +68,7 @@ class TestAuthBackend(cptestcase.BaseCherryPyTestCase):
                      0x2001: str('2001' * 16).decode('hex'),
                      }
         self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
-        self.logger = VCCSLogger('test_authbackend')
+        self.logger = VCCSLogger('test_authbackend', self.config)
 
         #cherrypy.root = AuthBackend(self.hasher, self.kdf, self.logger, self.credstore, self.config)
 
