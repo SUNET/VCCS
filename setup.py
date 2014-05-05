@@ -7,7 +7,7 @@ from distutils import versionpredicate
 here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README')).read()
 
-version = '0.9.0'
+version = '0.9.1-dev'
 
 install_requires = [
     'pyhsm >= 1.0.3',
