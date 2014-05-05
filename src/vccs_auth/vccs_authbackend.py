@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2012, 2013 NORDUnet A/S
+# Copyright (c) 2012, 2013, 2014 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -223,25 +223,24 @@ class VCCSLogger():
     Simple class to do logging in a unified way.
     """
 
-    def __init__(self, myname, context = '', syslog = True, debug = False):
+    def __init__(self, myname, config, context = ''):
         """
         :params myname: string with name of application
         :params context: string with auxillary data to appear in all audit log messages
-        :params syslog: boolean, log to syslog or not?
-        :params debug: boolean, controls log verbosity
+        :params config: VCCSAuthConfig instance
         """
         cherrypy.request.vccs_log_context = context
 
         self.logger = logging.getLogger(myname)
-        if debug:
+        if config.debug:
             self.logger.setLevel(logging.DEBUG)
         else:
             self.logger.setLevel(logging.INFO)
-        if syslog:
-            syslog_h = logging.handlers.SysLogHandler()
+        if config.syslog_socket:
+            syslog_h = logging.handlers.SysLogHandler(config.syslog_socket)
             formatter = logging.Formatter('%(name)s: %(levelname)s %(message)s')
             syslog_h.setFormatter(formatter)
-            if debug:
+            if config.debug:
                 syslog_h.setLevel(logging.DEBUG)
             self.logger.addHandler(syslog_h)
 
@@ -536,7 +535,7 @@ def main(myname = 'vccs_authbackend'):
 
     # initialize various components
     config = vccs_auth.config.VCCSAuthConfig(args.config_file, args.debug)
-    logger = VCCSLogger(myname, debug=config.debug)
+    logger = VCCSLogger(myname, config)
     kdf = ndnkdf.NDNKDF(config.nettle_path)
     hsm_lock = threading.RLock()
     hasher = vccs_auth.hasher.hasher_from_string(config.yhsm_device, hsm_lock, debug=config.debug)
