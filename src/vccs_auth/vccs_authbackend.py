@@ -232,6 +232,7 @@ class VCCSLogger():
         cherrypy.request.vccs_log_context = context
 
         self.logger = logging.getLogger(myname)
+        self.debug = self.logger.debug  # pass through debug calls to the logging logger
         if config.debug:
             self.logger.setLevel(logging.DEBUG)
         else:
