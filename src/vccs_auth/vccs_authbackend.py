@@ -436,8 +436,9 @@ class AuthBackend(object):
         :return: None or HTTP respobnse data as string
         """
         self.remote_ip = cherrypy.request.remote.ip
+        self.logger.debug("Status request from {!r}".format(self.remote_ip))
         if not self.remote_ip in self.config.status_allow:
-            self.logger.error("Denied revoke_creds request from {} not in revoke_creds_allow ({})".format(
+            self.logger.error("Denied status request from {} not in status_allow ({})".format(
                 self.remote_ip, self.config.status_allow))
             cherrypy.response.status = 403
             # Don't disclose anything about our internal issues
@@ -451,8 +452,12 @@ class AuthBackend(object):
         if len(res) >= 20:  # length of HMAC-SHA-1
             response['add_creds_hmac'] = 'OK'
         else:
+            self.logger.error("Failed hashing test data with add_creds_password_key_handle {!r} ({!r})".format(
+                self.config.add_creds_password_key_handle, res
+            ))
             response['status'] = 'FAIL'
 
+        self.logger.debug("Served status result {!r} to {!r}".format(response['status'], self.remote_ip))
         return "{}\n".format(simplejson.dumps(response))
 
 
