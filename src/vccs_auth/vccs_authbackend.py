@@ -287,6 +287,8 @@ class AuthBackend(object):
     """
 
     def __init__(self, hasher, kdf, logger, credstore, config, expose_real_errors=False):
+        assert isinstance(hasher, vccs_auth.hasher.VCCSHasher)
+        assert isinstance(config, vccs_auth.config.VCCSAuthConfig)
         self.hasher = hasher
         self.kdf = kdf
         self.logger = logger
@@ -424,6 +426,35 @@ class AuthBackend(object):
                                               }
                     }
         return "{}\n".format(simplejson.dumps(response))
+
+    @cherrypy.expose
+    def status(self):
+        """
+        Status requests testing HSM communication.
+        Useful in monitoring the authentication backend.
+
+        :return: None or HTTP respobnse data as string
+        """
+        self.remote_ip = cherrypy.request.remote.ip
+        if not self.remote_ip in self.config.status_allow:
+            self.logger.error("Denied revoke_creds request from {} not in revoke_creds_allow ({})".format(
+                self.remote_ip, self.config.status_allow))
+            cherrypy.response.status = 403
+            # Don't disclose anything about our internal issues
+            return None
+
+        response = {'version': 1,
+                    'status': 'OK',
+                    }
+
+        res = self.hasher.safe_hmac_sha1(self.config.add_creds_password_key_handle, chr(0x0))
+        if len(res) >= 20:  # length of HMAC-SHA-1
+            response['add_creds_hmac'] = 'OK'
+        else:
+            response['status'] = 'FAIL'
+
+        return "{}\n".format(simplejson.dumps(response))
+
 
     def _safe_parse_request(self, parse_fun, action, min_factors=1, max_factors=1):
         """
