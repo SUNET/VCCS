@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013 NORDUnet A/S
+# Copyright (c) 2013, 2014 NORDUnet A/S
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -46,6 +46,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'num_threads': '8',
                     'nettle_path': '',
                     'logdir': None,
+                    'syslog_socket': None,
                     'mongodb_uri': '127.0.0.1',
                     'add_creds_allow': '', # comma-separated list of IP addresses
                     'revoke_creds_allow': '', # comma-separated list of IP addresses
@@ -116,6 +117,16 @@ class VCCSAuthConfig():
         Path to CherryPy logfiles (string). Something like '/var/log/vccs' maybe.
         """
         res = self.config.get(self.section, 'logdir')
+        if not res:
+            res = None
+        return res
+
+    @property
+    def syslog_socket(self):
+        """
+        Syslog socket to log to (string). Something like '/dev/syslog' maybe.
+        """
+        res = self.config.get(self.section, 'syslog_socket')
         if not res:
             res = None
         return res

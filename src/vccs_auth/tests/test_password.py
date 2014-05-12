@@ -63,7 +63,7 @@ class TestPasswordHashing(unittest.TestCase):
         self.keys = {0x2000: str('2000' * 16).decode('hex'),
                      }
         self.hasher = vccs_auth.hasher.VCCSSoftHasher(self.keys, vccs_auth.hasher.NoOpLock())
-        self.logger = VCCSLogger('test_authbackend', syslog=False)
+        self.logger = VCCSLogger('test_authbackend', self.config)
 
     def test_password_hash_1(self):
         """
