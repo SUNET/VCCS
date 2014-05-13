@@ -41,15 +41,16 @@ import pyhsm.util
 
 from vccs_auth.common import VCCSAuthenticationError
 
-_CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
+_CONFIG_DEFAULTS = {'debug': False,                          # overwritten in VCCSAuthConfig.__init__()
                     'yhsm_device': '/dev/ttyACM0',
                     'num_threads': '8',
                     'nettle_path': '',
                     'logdir': None,
                     'syslog_socket': None,
                     'mongodb_uri': '127.0.0.1',
-                    'add_creds_allow': '', # comma-separated list of IP addresses
-                    'revoke_creds_allow': '', # comma-separated list of IP addresses
+                    'add_creds_allow': '',                   # comma-separated list of IP addresses
+                    'revoke_creds_allow': '',                # comma-separated list of IP addresses
+                    'status_allow': '',                      # comma-separated list of IP addresses
                     'listen_addr': '127.0.0.1',
                     'listen_port': '8550',
                     'kdf_min_iterations': '20000',
@@ -59,7 +60,7 @@ _CONFIG_DEFAULTS = {'debug': False, # overwritten in VCCSAuthConfig.__init__()
                     'add_creds_password_kdf_iterations': '50000',
                     'add_creds_password_salt_bytes': str(128 / 8),
                     'add_creds_oath_version': 'NDNv1',
-                    'add_creds_oath_key_handles_allow': '', # comma-separated list of integers
+                    'add_creds_oath_key_handles_allow': '',  # comma-separated list of integers
                     }
 
 _CONFIG_SECTION = 'vccs_authbackend'
@@ -77,6 +78,8 @@ class VCCSAuthConfig():
             [x.strip() for x in self.config.get(self.section, 'add_creds_allow').split(',')]
         self._parsed_revoke_creds_allow = \
             [x.strip() for x in self.config.get(self.section, 'revoke_creds_allow').split(',')]
+        self._parsed_status_allow = \
+            [x.strip() for x in self.config.get(self.section, 'status_allow').split(',')]
         tmp_key_handles = self.config.get(self.section, 'add_creds_oath_key_handles_allow').split(',')
         self._parsed_add_creds_oath_key_handles_allow = \
             [pyhsm.util.key_handle_to_int(x.strip()) for x in tmp_key_handles]
@@ -155,6 +158,15 @@ class VCCSAuthConfig():
         Comma-separated list of IP addresses.
         """
         return self._parsed_revoke_creds_allow
+
+    @property
+    def status_allow(self):
+        """
+        List of IP addresses from which to accept status commands (string).
+
+        Comma-separated list of IP addresses.
+        """
+        return self._parsed_status_allow
 
     @property
     def debug(self):
