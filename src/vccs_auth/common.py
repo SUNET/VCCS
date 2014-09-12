@@ -47,3 +47,7 @@ class VCCSAuthenticationError(Exception):
             reason = self.reason,
             )
 
+class VCCSRevokedCredential(VCCSAuthenticationError):
+    """
+    Credential is revoked error.
+    """

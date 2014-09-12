@@ -56,7 +56,7 @@ import simplejson
 import ndnkdf
 import vccs_auth
 
-from vccs_auth.common import VCCSAuthenticationError
+from vccs_auth.common import VCCSAuthenticationError, VCCSRevokedCredential
 from vccs_auth.credstore import VCCSAuthCredentialStoreMongoDB
 
 default_config_file = "/etc/vccs/vccs_authbackend.ini"
@@ -495,6 +495,12 @@ class AuthBackend(object):
                 return 501
 
             return parsed
+        except VCCSRevokedCredential, err:
+            self.logger.error("FAILED parsing request from {ip!r}: {reason!r}".format(
+                ip = self.remote_ip, reason = err.reason))
+            if self.expose_real_errors:
+                raise
+            return 410
         except VCCSAuthenticationError, autherr:
             self.logger.error("FAILED parsing request from {ip!r}: {reason!r}".format(
                 ip = self.remote_ip, reason = autherr.reason))
@@ -551,7 +557,10 @@ def revoke_credential(parsed, credstore, remote_ip):
     :param credstore: VCCSAuthCredentialStore() instance
     :param remote_ip: IP request was received from as string
     """
-    cred = credstore.get_credential(parsed['credential_id'])
+    try:
+        cred = credstore.get_credential(parsed['credential_id'])
+    except VCCSAuthenticationError:
+        raise VCCSRevokedCredential("Credential {!r} is already revoked".format(parsed['credential_id']))
     if not cred:
         raise VCCSAuthenticationError("Unknown credential: {!r}".format(parsed['credential_id']))
     info = {'timestamp': int(time.time()),
