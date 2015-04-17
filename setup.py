@@ -7,22 +7,22 @@ from distutils import versionpredicate
 here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README')).read()
 
-version = '0.9.1'
+version = '0.9.2'
 
 install_requires = [
-    'pyhsm >= 1.0.3',
-    'ndnkdf >= 0.1',
-    'py-bcrypt >= 0.3',
-    'cherrypy >= 3.2.0',
-    'simplejson >= 2.6.2',
-    'pyserial >= 2.6',
-    'pymongo >= 2.4.2',
+    'pyhsm>=1.0.3',
+    'ndnkdf>=0.1',
+    'py-bcrypt>=0.3',
+    'cherrypy>=3.2.0',
+    'simplejson>=2.6.2',
+    'pyserial>=2.6',
+    'pymongo>=2.8,<3',
 ]
 
 testing_extras = [
     'nose==1.2.1',
     'coverage==3.6',
-    'py-bcrypt == 0.4',
+    'py-bcrypt==0.4',
 ]
 
 setup(name='vccs_auth',
