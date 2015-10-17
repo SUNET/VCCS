@@ -451,9 +451,9 @@ class AuthBackend(object):
 
         try:
             res = self.hasher.safe_hmac_sha1(self.config.add_creds_password_key_handle, chr(0x0))
-        except Exception:
-            self.logger.error("Failed hashing test data with add_creds_password_key_handle {!r}".format(
-                self.config.add_creds_password_key_handle), traceback=True)
+        except Exception as exc:
+            self.logger.error("Failed hashing test data with add_creds_password_key_handle {!r}: {!s}".format(
+                self.config.add_creds_password_key_handle, exc), traceback=True)
             res = 'Hashing failed'
         if len(res) >= 20:  # length of HMAC-SHA-1
             response['add_creds_hmac'] = 'OK'
