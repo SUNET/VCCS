@@ -187,9 +187,14 @@ def init_hsm_config(cfg, args, logger):
                                             "as hex, or press enter to generate : ",
                                             length = 32, pad = True, generate = True).encode('hex')
 
-    flags = config['validator_hsm_flags']
+    print ('')
+
     if args.originator:
         flags = config['originator_hsm_flags']
+        logger.info('Initializing ORIGINATOR HSM with HSM flags 0x{:08x}'.format(flags))
+    else:
+        flags = config['validator_hsm_flags']
+        logger.info('Initializing VALIDATOR HSM with HSM flags 0x{:08x}'.format(flags))
 
     (send, expect,) = ('send', 'expect',)  # for color highlighting clarity below
     commands = [(send, ''), (expect, '^NO_CFG> .*'),
