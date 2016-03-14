@@ -52,12 +52,15 @@ config = {
     # Static cfg password for now. Master key is much more important for security.
     'cfg_password': '13043f3895dc5127b6ab200de911f724bced397572c9778eba259710e2464fc7',
 
+    # These are global permission flags for the HSM
     'originator_hsm_flags': 0x00010002,  # Enabled flags 00010002 = YSM_AEAD_GENERATE,YSM_HMAC_SHA1_GENERATE
     'validator_hsm_flags': 0x00030000,   # Enabled flags 00030000 = YSM_HMAC_SHA1_GENERATE,YSM_TEMP_KEY_LOAD
 
+    # These are key handle permission flags for regular HMAC-SHA-1 keys (used with password validation)
     'originator_hmac_key_flags': 0x00010000,  # Enabled flags 00010000 = YSM_HMAC_SHA1_GENERATE
     'validator_hmac_key_flags': 0x00010000,   # Enabled flags 00010000 = YSM_HMAC_SHA1_GENERATE
 
+    # These are key handle permission flags for OATH AEAD keys
     'originator_oath_key_flags': 0x00000002,  # Enabled flags 00000002 = YSM_AEAD_GENERATE
     'validator_oath_key_flags': 0x00020000,   # Enabled flags 00020000 = YSM_TEMP_KEY_LOAD
     }
@@ -234,7 +237,7 @@ def get_new_keyhandle( args, kdb):
     if args.key_usage == 'oath':
         suffix = 'da'  # halfway to ff if only using alphabetics
     while True:
-        suggestion = '%i%i%i%s' % (now.year - 2000, now.month, now.day, suffix)  # oh no, a 2100 problem
+        suggestion = '{:02d}{:02d}{:02d}{!s}'.format(now.year - 2000, now.month, now.day, suffix)  # oh no, a 2100 problem
         keyid = raw_input("Enter new key handle (press enter for '{!s}') : ".format(suggestion))
         if not keyid:
             keyid = suggestion
