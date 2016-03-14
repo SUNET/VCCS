@@ -135,7 +135,7 @@ class HsmSerial():
         Write data to HSM.
         :param data: Data to write as string
         """
-        self.ser.write(data)
+        self.ser.write(str(data))
         self.logger.debug("WRITE: %s" % (repr(data)))
 
     def drain(self):
