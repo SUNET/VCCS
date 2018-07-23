@@ -1,3 +1,4 @@
 python_module: vccs_auth
-publish_over_ssh: pypi.sunet.se
+publish_over_ssh:
+  - pypi.sunet.se
 clean_workspace: true
